@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     # Senha simples para proteger a tela (login por sessão via cookie).
     # Vazio = login desabilitado (comportamento atual, sem gate).
     app_login_password: str = ''
+    # Mantém a sessão logada por vários dias para uso prático no iPhone/navegador.
+    session_ttl_days: int = 90
     # Origens (domínios) autorizadas por CORS a chamar a API a partir de um
     # frontend publicado separadamente (ex.: HTML estático no Netlify/Vercel).
     # Múltiplas origens separadas por vírgula. Vazio = nenhuma origem cross-origin liberada.
@@ -38,6 +40,8 @@ class Settings(BaseSettings):
     # Pasta local com XLSX do STJ baixados manualmente (modo offline do
     # conector stj_precatorios). Vazio = modo online (baixa da página oficial).
     stj_local_dir: str = ''
+    # Pasta onde os XLSX enviados pela tela STJ ficam salvos. Em Render com disco persistente, use /data/stj_uploads.
+    stj_upload_dir: str = ''
     # API Serpro Consulta CND (Receita/PGFN) — serviço oficial PAGO, contratado
     # na Loja Serpro. Vazio = conector responde 'requer_api_contratada'.
     serpro_cnd_consumer_key: str = ''
