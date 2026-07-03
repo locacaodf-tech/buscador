@@ -421,6 +421,17 @@
     font-size: 15px; color: var(--ink-soft); background: var(--paper-muted); padding: 12px 14px;
     border-radius: 10px; margin-top: 14px; line-height: 1.6;
   }
+  .cert-copy-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .cert-copy-row:last-of-type { border-bottom: none; }
+  .cert-copy-btn {
+    flex-shrink: 0; font-size: 14px; font-weight: 700; padding: 8px 14px; border-radius: 8px;
+    background: var(--navy-950); color: #fff; border: none; cursor: pointer;
+  }
+  .cert-copy-btn.copiado { background: var(--success); }
+  .cert-copy-btn.cert-copy-all { width: 100%; margin-top: 14px; padding: 14px; font-size: 16px; }
 </style>
 <body>
 
@@ -1876,15 +1887,44 @@
     el('btnCertPreparar').addEventListener('click', () => prepararResumoCertidao(tribunal));
   }
 
+  async function copiarTexto(texto, botaoEl) {
+    try {
+      await navigator.clipboard.writeText(texto);
+      const original = botaoEl.textContent;
+      botaoEl.textContent = 'Copiado!';
+      botaoEl.classList.add('copiado');
+      setTimeout(() => { botaoEl.textContent = original; botaoEl.classList.remove('copiado'); }, 1500);
+    } catch (e) {
+      alert('Não consegui copiar automaticamente. Selecione e copie manualmente: ' + texto);
+    }
+  }
+
   function prepararResumoCertidao(tribunal) {
-    let html = '<div class="cert-summary-box"><b>Leve estas informações ao site oficial:</b><br>';
+    const campos = [];
     document.querySelectorAll('#certFieldsArea input[data-campo]').forEach((input) => {
       const label = CERT_FIELD_LABELS[input.dataset.campo] || input.dataset.campo;
-      if (input.value.trim()) html += escapeHtml(label) + ': <b>' + escapeHtml(input.value.trim()) + '</b><br>';
+      if (input.value.trim()) campos.push({ label, valor: input.value.trim() });
     });
+
+    let html = '<div class="cert-summary-box">';
+    html += '<b>Toque em "Copiar" e cole no campo correspondente do site oficial — evita digitar tudo de novo:</b>';
+    campos.forEach((c, i) => {
+      html += '<div class="cert-copy-row">';
+      html += '<div><span class="simple-field-label">' + escapeHtml(c.label) + ':</span> <span class="simple-field-value">' + escapeHtml(c.valor) + '</span></div>';
+      html += '<button class="cert-copy-btn" type="button" data-copy-index="' + i + '">Copiar</button>';
+      html += '</div>';
+    });
+    html += '<button class="cert-copy-btn cert-copy-all" type="button" id="btnCopiarTudo">Copiar tudo de uma vez</button>';
     html += '</div>';
     html += '<a class="cert-official-link" href="' + escapeHtml(tribunal.official_url) + '" target="_blank" rel="noopener">Abrir site oficial do tribunal →</a>';
     el('certResumoArea').innerHTML = html;
+
+    document.querySelectorAll('.cert-copy-btn[data-copy-index]').forEach((btn) => {
+      btn.addEventListener('click', () => copiarTexto(campos[Number(btn.dataset.copyIndex)].valor, btn));
+    });
+    const tudoTexto = campos.map((c) => c.label + ': ' + c.valor).join('\n');
+    el('btnCopiarTudo').addEventListener('click', () => copiarTexto(tudoTexto, el('btnCopiarTudo')));
+
     el('certResumoArea').scrollIntoView({ behavior: 'smooth', block: 'end' });
   }
 
