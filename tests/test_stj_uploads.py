@@ -32,8 +32,12 @@ def build_synthetic_stj_xlsx() -> bytes:
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     # Isola cada teste numa pasta de upload própria, sem sujar data/ real do projeto.
+    # Precisa travar tanto UPLOAD_DIR (fallback) quanto upload_dir() (que agora
+    # prioriza STJ_UPLOAD_DIR do settings) — senão, com a variável configurada
+    # no .env, os testes vazam pra pasta real e se contaminam entre si.
     isolated_dir = tmp_path / 'stj_uploads'
     monkeypatch.setattr(stj_uploads, 'UPLOAD_DIR', isolated_dir)
+    monkeypatch.setattr(stj_uploads, 'upload_dir', lambda: isolated_dir)
     return TestClient(app)
 
 
