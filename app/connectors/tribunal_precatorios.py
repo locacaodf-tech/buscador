@@ -47,7 +47,9 @@ class TribunalPrecatoriosConnector(BaseConnector):
 
     def __init__(self):
         raise ProviderNotConfigured(
-            'Conector tribunal_precatorios é um contrato de integração. Configure uma implementação real para o tribunal/SisPreq/PDPJ escolhido.'
+            'Esta fonte genérica de precatório/RPV ainda não está conectada a nenhum tribunal específico. '
+            'Se o número for do STJ, use a aba STJ (precisa enviar o XLSX oficial primeiro). '
+            'Se for do TRF1, use a aba Precatório/RPV buscando pelo número do processo (CNJ), não pelo sequencial isolado.'
         )
 
     async def search(self, search_type: str, search_key: str, **kwargs: Any) -> list[dict]:
