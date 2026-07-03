@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Claude Buscador de Processos</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="container">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Uso interno</p>
+        <h1>Claude Buscador de Processos</h1>
+        <p>Busca flexível por nome, CPF, CNPJ, OAB, número do processo/CNJ, requisitório, precatório ou RPV. Cada API/conector declara quais campos aceita.</p>
+        {% if login_enabled %}
+        <a href="/logout" style="display:inline-block; margin-top:12px; color:white; opacity:.85; text-decoration:underline; font-size:14px;">Sair</a>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Nova busca</h2>
+      <form id="searchForm">
+        <label>Token interno (X-Internal-Token) — opcional</label>
+        <input type="password" id="internal_token" placeholder="Preencha somente se INTERNAL_API_TOKEN estiver ativo no servidor" autocomplete="off" />
+        <small>Fica salvo apenas neste navegador (localStorage). {% if login_enabled %}Se você já entrou pela tela de login, pode deixar vazio — a sessão já autoriza as buscas.{% else %}Deixe vazio se o servidor não exigir token.{% endif %}</small>
+
+        <label>Tipo de identificador</label>
+        <select name="search_type" id="search_type">
+          <option value="auto">Automático / detectar pelo que eu informar</option>
+          <option value="cnj">Número CNJ</option>
+          <option value="numero_processo">Número do processo</option>
+          <option value="cpf">CPF</option>
+          <option value="cnpj">CNPJ</option>
+          <option value="name">Nome da parte</option>
+          <option value="oab">OAB</option>
+          <option value="requisitorio_number">Número do requisitório</option>
+          <option value="precatorio_number">Número do precatório</option>
+          <option value="rpv_number">Número da RPV</option>
+          <option value="precatorio_scan">Varredura de indícios de precatório/RPV</option>
+        </select>
+
+        <label>Identificador / chave de busca</label>
+        <input name="search_key" id="search_key" placeholder="Nome, CPF, CNJ, processo, requisitório, precatório, RPV, OAB..." />
+
+        <label>Provedor</label>
+        <select name="provider" id="provider">
+          <option value="auto">Auto</option>
+          <option value="multi">Tentar múltiplos compatíveis</option>
+          <option value="datajud">DataJud/CNJ</option>
+          <option value="judit">Judit</option>
+          <option value="tribunal_precatorios">API oficial de precatórios/SisPreq/PDPJ/TRF/TJ</option>
+        </select>
+
+        <label>Tribunais separados por vírgula</label>
+        <input name="tribunals" id="tribunals" placeholder="TRF1, TRF2, TJDFT, TRT10" />
+        <small>Vazio = TRFs. Para precatórios, sugiro começar por: {{ default_precat_tribunals | join(', ') }}</small>
+
+        <label>Parâmetros extras exigidos pela API/tribunal</label>
+        <textarea name="extra_params" id="extra_params" rows="5" placeholder='JSON opcional. Ex.: {"uf":"DF", "data_nascimento":"1980-01-01", "ano_orcamento":2027, "entidade_devedora":"União"}'></textarea>
+        <small>Use quando o provedor exigir UF da OAB, data de nascimento, nome da mãe, ano-orçamento, entidade devedora, CPF complementar etc.</small>
+
+        <div class="row">
+          <label><input type="checkbox" id="precatorio_only" /> Mostrar só indícios de precatório/RPV</label>
+          <label><input type="checkbox" id="include_raw" /> Incluir JSON bruto</label>
+        </div>
+
+        <button type="submit">Buscar</button>
+        <button type="button" id="capabilitiesBtn" class="secondary">Ver capacidades das APIs</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Resultado</h2>
+      <pre id="output">Aguardando busca...</pre>
+    </section>
+  </main>
+
+<script>
+const form = document.getElementById('searchForm');
+const output = document.getElementById('output');
+const capabilitiesBtn = document.getElementById('capabilitiesBtn');
+const internalTokenInput = document.getElementById('internal_token');
+
+const TOKEN_STORAGE_KEY = 'buscador_processos_internal_token';
+const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+if (savedToken) internalTokenInput.value = savedToken;
+
+internalTokenInput.addEventListener('change', () => {
+  const value = internalTokenInput.value.trim();
+  if (value) localStorage.setItem(TOKEN_STORAGE_KEY, value);
+  else localStorage.removeItem(TOKEN_STORAGE_KEY);
+});
+
+function buildHeaders(extra) {
+  const headers = Object.assign({}, extra || {});
+  const token = internalTokenInput.value.trim();
+  if (token) headers['X-Internal-Token'] = token;
+  return headers;
+}
+
+function readExtraParams() {
+  const raw = document.getElementById('extra_params').value.trim();
+  if (!raw) return {};
+  try { return JSON.parse(raw); }
+  catch (err) { throw new Error('JSON inválido em parâmetros extras: ' + err.message); }
+}
+
+async function handleResponse(res) {
+  if (res.status === 401) {
+    output.textContent = 'HTTP 401: token interno ausente ou inválido. Confira o campo "Token interno" acima e o valor de INTERNAL_API_TOKEN no servidor.';
+    return;
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    output.textContent = `Erro HTTP ${res.status}: ${text}`;
+    return;
+  }
+  const data = await res.json();
+  output.textContent = JSON.stringify(data, null, 2);
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  output.textContent = 'Consultando...';
+  try {
+    const tribunals = document.getElementById('tribunals').value
+      .split(',').map(s => s.trim()).filter(Boolean);
+    const body = {
+      provider: document.getElementById('provider').value,
+      search_type: document.getElementById('search_type').value,
+      search_key: document.getElementById('search_key').value || null,
+      tribunals,
+      max_results: 100,
+      precatorio_only: document.getElementById('precatorio_only').checked,
+      include_raw: document.getElementById('include_raw').checked,
+      extra_params: readExtraParams()
+    };
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: buildHeaders({'Content-Type': 'application/json'}),
+      body: JSON.stringify(body)
+    });
+    await handleResponse(res);
+  } catch (err) {
+    output.textContent = String(err);
+  }
+});
+
+capabilitiesBtn.addEventListener('click', async () => {
+  output.textContent = 'Carregando capacidades...';
+  try {
+    const res = await fetch('/api/capabilities', { headers: buildHeaders() });
+    await handleResponse(res);
+  } catch (err) {
+    output.textContent = String(err);
+  }
+});
+</script>
+</body>
+</html>

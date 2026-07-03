@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Formulário de teste com captcha (fixture interno)</title>
+</head>
+<body>
+  <h1>Consulta de teste</h1>
+  <form id="consultaForm">
+    <label>CPF/CNPJ</label>
+    <input type="text" id="documento" name="documento" />
+
+    <div>
+      <img id="captchaImg" alt="captcha"
+           src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iNTAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iNTAiIGZpbGw9IiNlZWUiLz48dGV4dCB4PSIxMCIgeT0iMzUiIGZvbnQtc2l6ZT0iMjgiIGZvbnQtZmFtaWx5PSJtb25vc3BhY2UiIGZpbGw9IiMyMjIiIHRyYW5zZm9ybT0icm90YXRlKC01IDgwIDI1KSI+SzlSMlg8L3RleHQ+PC9zdmc+" />
+      <label>Código da imagem</label>
+      <input type="text" id="captcha_codigo" name="captcha_codigo" />
+    </div>
+
+    <button type="button" id="btnSubmit">Consultar</button>
+  </form>
+
+  <div id="resultado" style="display:none;">
+    <h2>Resultado</h2>
+    <p id="resultadoTexto"></p>
+  </div>
+
+<script>
+  // Simula validação server-side: o código correto embutido na imagem é "K9R2X".
+  document.getElementById('btnSubmit').addEventListener('click', function () {
+    var codigo = document.getElementById('captcha_codigo').value.trim().toUpperCase();
+    var doc = document.getElementById('documento').value.trim();
+    if (codigo !== 'K9R2X') {
+      document.getElementById('resultado').style.display = 'block';
+      document.getElementById('resultadoTexto').textContent = 'Código captcha incorreto. Tente novamente.';
+      return;
+    }
+    document.getElementById('resultado').style.display = 'block';
+    document.getElementById('resultadoTexto').textContent = 'Consulta de teste bem-sucedida para o documento ' + doc + '. Captcha resolvido corretamente.';
+  });
+</script>
+</body>
+</html>

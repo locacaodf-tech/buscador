@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login — Claude Buscador de Processos</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="container" style="max-width: 420px; margin-top: 90px;">
+    <section class="hero" style="padding: 24px; margin-bottom: 18px;">
+      <p class="eyebrow">Uso interno</p>
+      <h1 style="font-size: 26px;">Acesso restrito</h1>
+    </section>
+    <section class="card">
+      {% if error %}
+      <p style="color:#b42318; font-weight:700; margin-top:0;">{{ error }}</p>
+      {% endif %}
+      <form method="post" action="/login">
+        <label>Senha</label>
+        <input type="password" name="password" autofocus required autocomplete="current-password" />
+        <button type="submit">Entrar</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
