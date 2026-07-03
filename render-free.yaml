@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: buscador-processos
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:///./buscador_processos.db
+      - key: DATAJUD_API_KEY
+        sync: false
+      - key: DATAJUD_BASE_URL
+        value: https://api-publica.datajud.cnj.jus.br
+      - key: JUDIT_ENABLED
+        value: false
+      - key: JUDIT_API_KEY
+        sync: false
+      - key: JUDIT_REQUESTS_BASE_URL
+        value: https://requests.production.judit.io
+      - key: JUDIT_TRACKING_BASE_URL
+        value: https://tracking.production.judit.io
+      - key: JUDIT_LAWSUITS_BASE_URL
+        value: https://lawsuits.production.judit.io
+      - key: JUDIT_NAME_SEARCH_TYPE
+        value: name
+      - key: INTERNAL_API_TOKEN
+        sync: false
+      - key: APP_LOGIN_PASSWORD
+        sync: false
+      - key: STJ_UPLOAD_DIR
+        value: data/stj_uploads
+      - key: SESSION_TTL_DAYS
+        value: 90
