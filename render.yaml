@@ -31,3 +31,7 @@ services:
         sync: false
       - key: APP_LOGIN_PASSWORD
         sync: false
+      - key: STJ_UPLOAD_DIR
+        value: data/stj_uploads
+      - key: SESSION_TTL_DAYS
+        value: 90
