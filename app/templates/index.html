@@ -432,6 +432,23 @@
   }
   .cert-copy-btn.copiado { background: var(--success); }
   .cert-copy-btn.cert-copy-all { width: 100%; margin-top: 14px; padding: 14px; font-size: 16px; }
+
+  .input-guide {
+    margin: 12px 0 16px; padding: 14px; border: 1px solid var(--gold-soft);
+    background: linear-gradient(180deg, #fffaf0, #ffffff); border-radius: 14px;
+    color: var(--ink); font-size: 14px; line-height: 1.55;
+  }
+  .input-guide strong { color: var(--navy-950); }
+  .input-guide .guide-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--navy-800); margin-bottom: 6px; }
+  .input-guide code { background: #f3f4f6; border: 1px solid var(--border); border-radius: 6px; padding: 2px 5px; font-size: 12px; }
+  .format-status {
+    margin-top: 8px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+    background: var(--paper-muted); color: var(--ink-soft); border: 1px solid var(--border);
+  }
+  .format-status.ok { background: #ecfdf5; border-color: #bbf7d0; color: #166534; }
+  .format-status.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+  .field-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
+  @media (max-width: 720px) { .field-grid-3 { grid-template-columns: 1fr; } }
 </style>
 <body>
 
@@ -457,8 +474,57 @@
 
   <section class="simple-card" id="simplePanel">
     <h2 class="simple-title">O que você quer descobrir?</h2>
-    <p class="simple-subtitle">Digite um nome, CPF, CNPJ, CNJ ou número de precatório/sequencial. Depois escolha o que fazer com ele. <b>"Montar Dossiê"</b> já busca o processo E verifica se há indício de precatório, sozinho.</p>
-    <input type="text" id="simpleSearchKey" class="simple-input" placeholder="Nome, CPF, CNPJ ou número do processo" autocomplete="off" />
+    <p class="simple-subtitle">Escolha o tipo de informação, digite do jeito que você tiver, e o sistema orienta o formato correto antes de buscar.</p>
+
+    <label for="simpleSearchType">O que você está informando?</label>
+    <select id="simpleSearchType">
+      <option value="auto">Não sei / detectar automaticamente</option>
+      <option value="cpf">CPF</option>
+      <option value="cnpj">CNPJ</option>
+      <option value="name">Nome completo</option>
+      <option value="oab">OAB</option>
+      <option value="cnj">Número CNJ</option>
+      <option value="numero_processo">Número de processo</option>
+      <option value="precatorio">Número do precatório</option>
+      <option value="requisitorio">Número do requisitório</option>
+      <option value="rpv">Número da RPV</option>
+      <option value="stj_sequencial">Sequencial STJ</option>
+    </select>
+
+    <label for="simpleSearchKey" style="margin-top:14px;">Valor pesquisado</label>
+    <input type="text" id="simpleSearchKey" class="simple-input" placeholder="Ex.: CPF, CNJ, nome, OAB ou sequencial" autocomplete="off" />
+    <div id="simpleInputGuide" class="input-guide"></div>
+    <div id="simpleFormatStatus" class="format-status"></div>
+
+    <div class="field-grid-3">
+      <div>
+        <label for="simpleUf">UF <span class="hint">— se souber</span></label>
+        <select id="simpleUf">
+          <option value="">—</option>
+          <option>AC</option><option>AL</option><option>AP</option><option>AM</option>
+          <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
+          <option>GO</option><option>MA</option><option>MT</option><option>MS</option>
+          <option>MG</option><option>PA</option><option>PB</option><option>PR</option>
+          <option>PE</option><option>PI</option><option>RJ</option><option>RN</option>
+          <option>RS</option><option>RO</option><option>RR</option><option>SC</option>
+          <option>SP</option><option>SE</option><option>TO</option>
+        </select>
+      </div>
+      <div>
+        <label for="simpleTribunal">Tribunal <span class="hint">— se souber</span></label>
+        <select id="simpleTribunal">
+          <option value="">—</option>
+          <option>TRF1</option><option>TRF2</option><option>TRF3</option>
+          <option>TRF4</option><option>TRF5</option><option>TRF6</option>
+          <option>STJ</option><option>STF</option><option>TST</option><option>TJDFT</option>
+        </select>
+      </div>
+      <div>
+        <label for="simpleAnoOrcamento">Ano-orçamento <span class="hint">— se souber</span></label>
+        <input type="text" inputmode="numeric" id="simpleAnoOrcamento" placeholder="2026 ou 2027" />
+      </div>
+    </div>
+
     <div class="diligencia-actions">
       <button class="primary" id="btnSimpleDossie" type="button">Montar Dossiê</button>
       <button class="secondary" id="btnSimpleCertidoes" type="button">Consultar Certidões</button>
@@ -517,6 +583,8 @@
 
     <label for="searchKey">Valor pesquisado</label>
     <input type="text" id="searchKey" placeholder="Ex.: 0032681-47.2017.4.01.3400" autocomplete="off" />
+    <div id="advancedInputGuide" class="input-guide"></div>
+    <div id="advancedFormatStatus" class="format-status"></div>
 
     <div class="row-2">
       <div>
@@ -1244,8 +1312,10 @@
     catch (e) { setError(e.message); return; }
 
     const provider = el('provider').value;
-    const searchType = el('searchType').value;
-    const searchKey = el('searchKey').value.trim();
+    const selectedType = el('searchType').value;
+    const normalized = normalizeSearchValue(selectedType, el('searchKey').value.trim(), 'uf');
+    const searchType = selectedType;
+    const searchKey = normalized.value || el('searchKey').value.trim();
     const tribunals = readTribunals();
 
     if (isDemo()) {
@@ -1430,6 +1500,155 @@
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
+  // ================= Orientador de preenchimento =================
+  // Ajuda a digitar o formato certo sem exigir que o usuário saiba JSON/regras
+  // de cada tribunal. Puramente client-side: só orienta e normaliza o que vai
+  // no campo de busca — não inventa nem confirma nenhum dado.
+
+  const SEARCH_GUIDES = {
+    auto: {
+      title: 'Detecção automática',
+      text: 'Use quando não souber o tipo. O sistema tenta reconhecer CPF, CNPJ, CNJ, OAB ou nome. Para precatório/LOA, quanto mais dados você informar, melhor.',
+      examples: ['72137797100', '721.377.971-00', '0032681-47.2017.4.01.3400', '15547/DF', 'Nome completo da pessoa'],
+    },
+    cpf: {
+      title: 'CPF',
+      text: 'Pode digitar com ou sem pontos e traço. A forma enviada ao backend será normalizada só com números.',
+      examples: ['72137797100', '721.377.971-00'],
+    },
+    cnpj: {
+      title: 'CNPJ',
+      text: 'Pode digitar com ou sem máscara. O sistema normaliza para 14 números.',
+      examples: ['00000000000191', '00.000.000/0001-91'],
+    },
+    name: {
+      title: 'Nome',
+      text: 'Digite o nome mais completo possível. Para reduzir homônimos, complemente com CPF, data de nascimento, nome da mãe ou UF quando tiver.',
+      examples: ['Maria da Silva Souza'],
+    },
+    oab: {
+      title: 'OAB',
+      text: 'Informe número e UF. Você pode digitar 15547 e escolher UF, ou digitar 15547/DF que o sistema separa automaticamente.',
+      examples: ['15547 + UF DF', '15547/DF', 'DF15547'],
+    },
+    cnj: {
+      title: 'Número CNJ',
+      text: 'Use o número completo do processo. Pode digitar com máscara CNJ. Evite número incompleto.',
+      examples: ['0032681-47.2017.4.01.3400', '00326814720174013400'],
+    },
+    numero_processo: {
+      title: 'Número de processo',
+      text: 'Use quando o número não estiver no padrão CNJ ou quando o tribunal exigir o número interno/originário.',
+      examples: ['0032681-47.2017.4.01.3400', '1219012520174019198'],
+    },
+    precatorio: {
+      title: 'Precatório',
+      text: 'Informe o número/sequencial do precatório se tiver. Para confirmar LOA, normalmente também ajudam tribunal, ano-orçamento e entidade devedora.',
+      examples: ['15547', '0506671-51.2025.3.00.0000', 'PRC 15547'],
+    },
+    requisitorio: {
+      title: 'Requisitório',
+      text: 'Informe o número do requisitório/ofício requisitório. Alguns tribunais pedem CPF/CNPJ do beneficiário junto.',
+      examples: ['número do ofício requisitório', 'processo de origem + CPF/CNPJ'],
+    },
+    rpv: {
+      title: 'RPV',
+      text: 'Informe o número da RPV ou o processo de origem. Para status de pagamento, tribunal e CPF/CNPJ podem ser necessários.',
+      examples: ['número da RPV', 'processo originário'],
+    },
+    stj_sequencial: {
+      title: 'Sequencial STJ',
+      text: 'Use o sequencial da lista oficial do STJ. Antes de buscar, carregue o XLSX oficial na aba STJ — sem isso, este campo aqui não confirma nada, só te leva pra aba certa.',
+      examples: ['15547'],
+    },
+  };
+
+  function digitsOnly(v) { return String(v || '').replace(/\D/g, ''); }
+  function looksLikeCNJ(v) { return /^\d{7}-?\d{2}\.?\d{4}\.?\d\.?\d{2}\.?\d{4}$/.test(String(v || '').trim()) || digitsOnly(v).length === 20; }
+  function looksLikeOAB(v) { return /^([A-Z]{2})?\s*\d{1,8}\s*\/?\s*([A-Z]{2})?$/i.test(String(v || '').trim()); }
+
+  function splitOAB(raw) {
+    const v = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    let m = v.match(/^(\d{1,8})\/?([A-Z]{2})$/);
+    if (m) return { number: m[1], uf: m[2] };
+    m = v.match(/^([A-Z]{2})(\d{1,8})$/);
+    if (m) return { number: m[2], uf: m[1] };
+    return { number: v.replace(/\D/g, ''), uf: '' };
+  }
+
+  function inferType(raw) {
+    const v = String(raw || '').trim();
+    const d = digitsOnly(v);
+    if (!v) return 'auto';
+    if (looksLikeCNJ(v)) return 'cnj';
+    if (d.length === 11) return 'cpf';
+    if (d.length === 14) return 'cnpj';
+    if (looksLikeOAB(v) && /[A-Z]{2}/i.test(v)) return 'oab';
+    return 'name';
+  }
+
+  function normalizeSearchValue(type, raw, ufElementId) {
+    const original = String(raw || '').trim();
+    let value = original;
+    let message = '';
+    let ok = false;
+    let inferred = type === 'auto' ? inferType(original) : type;
+
+    if (inferred === 'cpf') {
+      value = digitsOnly(original);
+      ok = value.length === 11;
+      message = ok ? 'CPF normalizado para ' + value + '. Pode digitar com ou sem pontuação.' : 'CPF deve ter 11 números. Ex.: 72137797100 ou 721.377.971-00.';
+    } else if (inferred === 'cnpj') {
+      value = digitsOnly(original);
+      ok = value.length === 14;
+      message = ok ? 'CNPJ normalizado para ' + value + '.' : 'CNPJ deve ter 14 números. Ex.: 00.000.000/0001-91.';
+    } else if (inferred === 'oab') {
+      const parts = splitOAB(original);
+      value = parts.number;
+      if (parts.uf && ufElementId && el(ufElementId)) el(ufElementId).value = parts.uf;
+      const uf = ufElementId && el(ufElementId) ? el(ufElementId).value : parts.uf;
+      ok = !!value && !!uf;
+      message = ok ? 'OAB pronta: número ' + value + ' / UF ' + uf + '.' : 'Para OAB, informe número e UF. Ex.: 15547/DF ou número 15547 + UF DF.';
+    } else if (inferred === 'cnj') {
+      ok = looksLikeCNJ(original);
+      message = ok ? 'Número CNJ reconhecido.' : 'CNJ deve estar completo. Ex.: 0032681-47.2017.4.01.3400.';
+    } else if (inferred === 'stj_sequencial') {
+      value = digitsOnly(original) || original;
+      ok = !!value;
+      message = ok ? 'Sequencial STJ pronto. Lembre de carregar o XLSX oficial do STJ antes.' : 'Informe o sequencial do STJ. Ex.: 15547.';
+    } else {
+      ok = !!original;
+      message = ok ? 'Valor pronto. Quanto mais completo o dado, melhor a busca.' : 'Digite o valor que você quer pesquisar.';
+    }
+    return { type: inferred, value, ok, message };
+  }
+
+  function renderInputGuide(type, guideElId, statusElId, inputElId, ufElId) {
+    const guideEl = el(guideElId);
+    const statusEl = el(statusElId);
+    const inputEl = el(inputElId);
+    if (!guideEl || !statusEl || !inputEl) return; // aba ainda não renderizada nesta interação
+    const guide = SEARCH_GUIDES[type] || SEARCH_GUIDES.auto;
+    const normalized = normalizeSearchValue(type, inputEl.value, ufElId);
+    const examples = guide.examples.map((x) => '<code>' + escapeHtml(x) + '</code>').join(' &nbsp; ');
+    guideEl.innerHTML = '<div class="guide-title">Orientador de preenchimento — ' + escapeHtml(guide.title) + '</div>'
+      + '<div>' + escapeHtml(guide.text) + '</div>'
+      + '<div style="margin-top:8px;"><strong>Exemplos:</strong> ' + examples + '</div>';
+    statusEl.className = 'format-status ' + (normalized.ok ? 'ok' : 'warn');
+    statusEl.textContent = normalized.message;
+  }
+
+  function buildSimpleExtraParams() {
+    const params = {};
+    const uf = el('simpleUf').value.trim();
+    const tribunal = el('simpleTribunal').value.trim();
+    const ano = el('simpleAnoOrcamento').value.trim();
+    if (uf) params.uf = uf;
+    if (tribunal) params.tribunal = tribunal;
+    if (ano) params.ano_orcamento = /^\d+$/.test(ano) ? Number(ano) : ano;
+    return params;
+  }
+
   // ================= Diligência diária (hub do Modo Simples) =================
 
   function demoDossier(searchType, searchKey) {
@@ -1454,7 +1673,11 @@
     };
   }
 
-  function simpleValue() { return el('simpleSearchKey').value.trim(); }
+  function simpleValue() {
+    const raw = el('simpleSearchKey').value.trim();
+    const normalized = normalizeSearchValue(el('simpleSearchType').value, raw, 'simpleUf');
+    return normalized.value || raw;
+  }
 
   function handleSimpleCertidoes() {
     showSimpleCertPanel();
@@ -1779,7 +2002,9 @@
       return;
     }
     try {
-      const body = { provider: 'auto', search_type: 'auto', search_key: key, extra_params: {} };
+      const selectedType = el('simpleSearchType').value;
+      const apiSearchType = selectedType === 'stj_sequencial' ? 'precatorio' : selectedType;
+      const body = { provider: 'auto', search_type: apiSearchType, search_key: key, extra_params: buildSimpleExtraParams() };
       const data = await apiFetch('/api/dossier', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
       renderSimpleResult(data);
     } catch (e) {
@@ -1926,6 +2151,15 @@
 
     el('certResumoArea').scrollIntoView({ behavior: 'smooth', block: 'end' });
   }
+
+  ['simpleSearchType', 'simpleSearchKey', 'simpleUf'].forEach((id) => el(id).addEventListener('input', () => renderInputGuide(el('simpleSearchType').value, 'simpleInputGuide', 'simpleFormatStatus', 'simpleSearchKey', 'simpleUf')));
+  ['searchType', 'searchKey', 'uf'].forEach((id) => el(id).addEventListener('input', () => renderInputGuide(el('searchType').value, 'advancedInputGuide', 'advancedFormatStatus', 'searchKey', 'uf')));
+  ['simpleSearchType', 'simpleUf', 'searchType', 'uf'].forEach((id) => el(id).addEventListener('change', () => {
+    renderInputGuide(el('simpleSearchType').value, 'simpleInputGuide', 'simpleFormatStatus', 'simpleSearchKey', 'simpleUf');
+    renderInputGuide(el('searchType').value, 'advancedInputGuide', 'advancedFormatStatus', 'searchKey', 'uf');
+  }));
+  renderInputGuide(el('simpleSearchType').value, 'simpleInputGuide', 'simpleFormatStatus', 'simpleSearchKey', 'simpleUf');
+  renderInputGuide(el('searchType').value, 'advancedInputGuide', 'advancedFormatStatus', 'searchKey', 'uf');
 
   setMode(true); // Modo simples é o padrão ao abrir a tela.
 })();
