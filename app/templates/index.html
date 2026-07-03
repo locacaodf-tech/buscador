@@ -583,7 +583,7 @@
   <section id="resultsArea">
     <div class="empty-state" id="emptyState">
       <span class="glyph">⚖</span>
-      Preencha os campos acima e toque em Buscar.<br>Sem URL de backend, o resultado é uma demonstração.
+      Preencha os campos acima e toque em Buscar.
     </div>
   </section>
   </div>
@@ -671,7 +671,6 @@
 
 <footer class="foot">
   Uso interno. Nenhuma chave de API trafega por esta tela.<br>
-  Modo demonstração usa dados fictícios só para pré-visualização.
 </footer>
 
 <script>
@@ -793,10 +792,10 @@
     try {
       res = await fetch(url, options);
     } catch (e) {
-      throw new Error('Não consegui conectar em ' + url + '. Confira a URL do backend, o CORS (FRONTEND_ALLOWED_ORIGINS) e se o servidor está no ar.');
+      throw new Error('Não consegui conectar em ' + url + '. Confira se o servidor está no ar e tente novamente.');
     }
     if (res.status === 401) {
-      throw new Error('HTTP 401: token interno ausente ou inválido. Confira o campo "Token interno" acima.');
+      throw new Error('HTTP 401: sessão expirada ou acesso não autorizado. Faça login novamente.');
     }
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -805,7 +804,7 @@
     return res.json();
   }
 
-  // ---------- Dados de demonstração ----------
+  // ---------- Dados de pré-visualização offline ----------
 
   function demoSearchResponse(provider, searchType, searchKey, tribunals, extraParams) {
     const type = searchType === 'auto' ? 'cnj' : searchType;
@@ -819,7 +818,7 @@
   // Gera variação determinística a partir do texto digitado — mesmo valor
   // digitado sempre dá o mesmo exemplo (previsível), mas valores diferentes
   // dão exemplos visivelmente diferentes. Resolve a queixa real de "sempre
-  // mostra o mesmo resultado" no modo demonstração.
+  // mostra o mesmo resultado" no modo offline.
   function seedFromText(text) {
     let h = 0;
     const s = String(text || 'exemplo');
@@ -863,7 +862,7 @@
         precatorio_flags: ['classe_precatorio_ou_rpv', 'movimento_precatorio_ou_rpv', 'requisicao_enviada_ao_tribunal', 'texto_menciona_precatorio'],
       }],
       warnings: [
-        'Demonstração: indício processual via ' + providerUsed + '. Preencha a URL do backend para consultar dados reais.',
+        'Pré-visualização offline: indício processual via ' + providerUsed + '. Faça login e consulte dados reais no servidor.',
         'Este exemplo varia conforme o que você digita (número de processo, valores, score), mas todos os campos continuam sendo fictícios.',
       ],
     };
@@ -926,7 +925,7 @@
 
   function demoCapabilities() {
     return {
-      message: 'Cada provedor/API declara os identificadores aceitos e campos extras que pode exigir. (dados de demonstração)',
+      message: 'Cada provedor/API declara os identificadores aceitos e campos extras que pode exigir. (dados de pré-visualização offline)',
       providers: {
         datajud: {
           supported_search_types: ['cnj', 'numero_processo', 'precatorio_scan'],
@@ -1015,7 +1014,7 @@
     Object.values(groups).flat().forEach(([, , status]) => { byStatus[status] = (byStatus[status] || 0) + 1; });
 
     return {
-      message: 'Registro de fontes oficiais/institucionais para precatórios, RPVs, LOA, orçamento, fila e pagamento. (dados de demonstração — espelham o registry real)',
+      message: 'Registro de fontes oficiais/institucionais para precatórios, RPVs, LOA, orçamento, fila e pagamento. (dados de pré-visualização offline — espelham o registry real)',
       summary: { total_sources: 66, by_integration_status: byStatus },
       groups,
     };
@@ -1212,7 +1211,7 @@
     });
     html += '</div>';
 
-    // Aceita tanto o formato "groups" (demonstração) quanto "sources" flat (backend real).
+    // Aceita tanto o formato "groups" (pré-visualização offline) quanto "sources" flat (backend real).
     let groups = data.groups;
     if (!groups && data.sources) {
       groups = {};
@@ -1250,12 +1249,12 @@
     const tribunals = readTribunals();
 
     if (isDemo()) {
-      setLoading('Consultando (demonstração)…');
+      setLoading('Consultando…');
       setTimeout(() => renderSearchResponse(demoSearchResponse(provider, searchType, searchKey, tribunals, extraParams)), 450);
       return;
     }
 
-    setLoading('Consultando ' + backendUrl() + '…');
+    setLoading('Consultando servidor…');
     try {
       const body = { provider, search_type: searchType, search_key: searchKey || null, tribunals, extra_params: extraParams, max_results: 50 };
       const data = await apiFetch('/api/search', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
@@ -1265,11 +1264,11 @@
 
   async function handleCapabilities() {
     if (isDemo()) {
-      setLoading('Carregando capacidades (demonstração)…');
+      setLoading('Carregando capacidades…');
       setTimeout(() => renderCapabilities(demoCapabilities()), 350);
       return;
     }
-    setLoading('Carregando capacidades de ' + backendUrl() + '…');
+    setLoading('Carregando capacidades do servidor…');
     try {
       const data = await apiFetch('/api/capabilities', { method: 'GET', headers: buildHeaders(false) });
       renderCapabilities(data);
@@ -1278,11 +1277,11 @@
 
   async function handleHistory() {
     if (isDemo()) {
-      setLoading('Carregando histórico (demonstração)…');
+      setLoading('Carregando histórico…');
       setTimeout(() => renderHistory(demoHistory()), 350);
       return;
     }
-    setLoading('Carregando histórico de ' + backendUrl() + '…');
+    setLoading('Carregando histórico do servidor…');
     try {
       const data = await apiFetch('/api/history', { method: 'GET', headers: buildHeaders(false) });
       renderHistory(data);
@@ -1300,7 +1299,7 @@
     el('extraParamsAdvanced').value = '';
     el('provider').value = 'auto';
     el('searchType').value = 'auto';
-    resultsArea.innerHTML = '<div class="empty-state"><span class="glyph">⚖</span>Preencha os campos acima e toque em Buscar.<br>Sem URL de backend, o resultado é uma demonstração.</div>';
+    resultsArea.innerHTML = '<div class="empty-state"><span class="glyph">⚖</span>Preencha os campos acima e toque em Buscar.</div>';
   }
 
   el('btnSearch').addEventListener('click', handleSearch);
@@ -1311,7 +1310,7 @@
   // ---------- STJ — upload e busca (sem dado sintético) ----------
 
   function stjNotReadyMessage() {
-    return 'Preencha a URL do backend acima para enviar ou buscar arquivos do STJ — isso exige um servidor real, não dá para demonstrar com dado fictício.';
+    return 'Faça login e tente novamente. O envio do STJ usa o próprio servidor desta ferramenta.';
   }
 
   function formatCurrencyStj(value) {
@@ -1501,7 +1500,7 @@
 
   function demoCertSources() {
     return {
-      message: 'Fontes de certidões (dados de demonstração — espelham o registry real).',
+      message: 'Fontes de certidões (dados de pré-visualização offline — espelham o registry real).',
       sources: {
         serpro_consulta_cnd: { source_id: 'serpro_consulta_cnd', name: 'Serpro Consulta CND (Receita + PGFN)', orgao: 'Serpro / RFB / PGFN', certificate_types: ['fiscal_cnd'], requires_api_contract: true, captcha_expected: false, integration_status: 'implemented_configurable', official_url: 'https://loja.serpro.gov.br/consultacnd' },
         receita_pgfn_cnd_portal: { source_id: 'receita_pgfn_cnd_portal', name: 'Receita/PGFN - Portal Regularize', orgao: 'RFB / PGFN', certificate_types: ['fiscal_cnd'], integration_status: 'source_mapping_required', official_url: 'https://www.regularize.pgfn.gov.br/' },
@@ -1588,11 +1587,11 @@
   async function handleCertRequest() {
     if (!certSelectedSourceId) { return; }
     if (isDemo()) {
-      el('certResultArea').innerHTML = '<div class="loading"><span class="spinner"></span>Solicitando (demonstração)…</div>';
+      el('certResultArea').innerHTML = '<div class="loading"><span class="spinner"></span>Solicitando…</div>';
       setTimeout(() => renderCertResult(demoCertRequestResult(certSelectedSourceId)), 400);
       return;
     }
-    el('certResultArea').innerHTML = '<div class="loading"><span class="spinner"></span>Solicitando em ' + escapeHtml(backendUrl()) + '…</div>';
+    el('certResultArea').innerHTML = '<div class="loading"><span class="spinner"></span>Solicitando no servidor…</div>';
     try {
       const body = {
         source_id: certSelectedSourceId,
@@ -1615,7 +1614,7 @@
 
   function demoMasterSources() {
     return {
-      message: 'Mapa mestre de fontes/APIs. (dados de demonstração — espelham o registry real)',
+      message: 'Mapa mestre de fontes/APIs. (dados de pré-visualização offline — espelham o registry real)',
       summary: {
         total_precatorio_oficial: 66, total_certidoes: 8, total_externo_comercial: 11,
         prontos_para_uso_agora: [
