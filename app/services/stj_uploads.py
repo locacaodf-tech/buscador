@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..config import get_settings
 from ..connectors.stj_precatorios import (
     find_header_row,
     infer_file_metadata,
@@ -36,9 +37,17 @@ def _sanitize_filename(name: str) -> str:
     return name or 'arquivo.xlsx'
 
 
+def upload_dir() -> Path:
+    # Permite produção persistente via STJ_UPLOAD_DIR=/data/stj_uploads.
+    # Se a variável não estiver definida, preserva o comportamento local/testes.
+    configured = getattr(get_settings(), 'stj_upload_dir', '')
+    return Path(configured) if configured else UPLOAD_DIR
+
+
 def ensure_upload_dir() -> Path:
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    return UPLOAD_DIR
+    directory = upload_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
 
 
 @dataclass
@@ -75,7 +84,7 @@ def save_uploaded_file(original_filename: str, content: bytes) -> UploadedFileIn
     safe_name = _sanitize_filename(original_filename)
     timestamp = datetime.now(timezone.utc).strftime(TIMESTAMP_FMT)
     stored_filename = f'{timestamp}{SEP}{safe_name}'
-    stored_path = UPLOAD_DIR / stored_filename
+    stored_path = ensure_upload_dir() / stored_filename
     stored_path.write_bytes(content)
     return UploadedFileInfo(
         original_filename=original_filename,
@@ -88,7 +97,8 @@ def save_uploaded_file(original_filename: str, content: bytes) -> UploadedFileIn
 def list_uploaded_files() -> list[UploadedFileInfo]:
     ensure_upload_dir()
     out = []
-    for path in sorted(UPLOAD_DIR.glob('*.xls*')):
+    directory = ensure_upload_dir()
+    for path in sorted(directory.glob('*.xls*')):
         stored_filename = path.name
         original = stored_filename.split(SEP, 1)[1] if SEP in stored_filename else stored_filename
         out.append(UploadedFileInfo(
