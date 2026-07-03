@@ -99,7 +99,7 @@ CERTIFICATE_SOURCE_REGISTRY: dict[str, CertificateSource] = {
         scope='justica_federal',
         certificate_types=('civel', 'criminal', 'eleitoral'),
         source_type='portal_automation_pendente',
-        official_url='https://www.cjf.jus.br/cjf/certidao-negativa',
+        official_url='https://certidao-unificada.cjf.jus.br/',
         captcha_expected=None,
         accepted_inputs=('cpf', 'cnpj', 'nome'),
         integration_status='source_mapping_required',
@@ -117,6 +117,21 @@ CERTIFICATE_SOURCE_REGISTRY: dict[str, CertificateSource] = {
     # motorista, lista os 27 links). Campos exatos e gratuidade só confirmados
     # onde marcado 'source_mapping_required' com notes detalhadas — o resto é
     # 'not_researched' de propósito (só a URL é real, capacidades não verificadas).
+    'tjdft_certidoes': CertificateSource(
+        source_id='tjdft_certidoes', name='TJDFT - Certidão Judicial de Distribuição (Nada Consta)', orgao='TJDFT', scope='distrital',
+        certificate_types=('civel', 'criminal', 'especial', 'falencia_recuperacao'), source_type='portal_html_a_mapear',
+        official_url='https://cnc.tjdft.jus.br/solicitacao-externa', requires_login=False,
+        accepted_inputs=('nome', 'cpf_cnpj', 'nome_mae'),
+        integration_status='source_mapping_required',
+        notes=(
+            'CONFIRMADO ao vivo: gratuito e instantâneo desde 2014 (extinguiu o cartório pago Rui Barbosa). '
+            'Sistema CNC (Certidão Nada Consta), cnc.tjdft.jus.br. 4 tipos: Cível, Criminal, Especial (cível+criminal), '
+            'Falência e Recuperação Judicial. CAMPOS DIFEREM POR TIPO: Cível/Falência exige CPF (PF) ou CNPJ (PJ) + '
+            'nome; Criminal/Especial exige CPF + nome + NOME DA MÃE (PF) ou CNPJ (PJ). Em caso de homonímia não emite '
+            'automático — cai para atendimento via NUCER (inclusive por Microsoft Teams, "Balcão Virtual"). '
+            'Validade 30 dias. Captcha não verificado — melhor candidato a pesquisar em seguida, dado o seu foco em DF.'
+        ),
+    ),
     'tjac_certidoes': CertificateSource(
         source_id='tjac_certidoes', name='TJAC - Certidões cível/criminal', orgao='TJAC', scope='justica_estadual',
         certificate_types=('civel', 'criminal'), source_type='portal_html_a_mapear',
@@ -301,16 +316,19 @@ CERTIFICATE_SOURCE_REGISTRY: dict[str, CertificateSource] = {
     ),
     'tjsp_certidoes': CertificateSource(
         source_id='tjsp_certidoes', name='TJSP - Certidões cível/criminal', orgao='TJSP', scope='justica_estadual',
-        certificate_types=('civel', 'criminal'), source_type='portal_html_gov_br',
-        official_url='https://www.tjsp.jus.br/Certidoes/Certidoes/CertidoesDuvidasFrequentes', requires_login=True,
+        certificate_types=('civel', 'criminal'), source_type='portal_html_a_mapear',
+        official_url='https://www.tjsp.jus.br/Certidoes/Certidoes/CertidoesPrimeiraInstancia', requires_login=False,
         accepted_inputs=('nome', 'rg', 'cpf_cnpj', 'nome_pai', 'nome_mae', 'data_nascimento', 'naturalidade', 'email'),
         integration_status='source_mapping_required',
         notes=(
-            'Gratuito confirmado. Campos (1ª instância): nome completo, RG, CPF/CNPJ, nome completo do pai e da '
-            'mãe, data de nascimento, naturalidade, e-mail. Certidão criminal só para nascidos a partir de 1969 '
-            '(mais antigos exigem presença). Sistema de 2ª instância (certidoes.tjsp.jus.br) EXIGE conta gov.br '
-            'nível prata/ouro. Emissão da capital usa a plataforma SAJ (esaj.tjsp.jus.br), a mesma bloqueada por '
-            'robots.txt no TJBA — interior varia por comarca.'
+            'Link corrigido em 03/07/2026: apontava por engano pra página de Perguntas Frequentes, não pro '
+            'cadastro de pedido — corrigido pra "CertidoesPrimeiraInstancia", que tem o botão "Cadastro de Pedido '
+            'de Certidão" levando direto ao formulário eletrônico. Gratuito confirmado (1ª instância, capital e '
+            'interior). Campos: nome completo, RG, CPF/CNPJ, nome completo do pai e da mãe, data de nascimento, '
+            'naturalidade, e-mail. Certidão criminal só para nascidos a partir de 1969 (mais antigos exigem '
+            'presença). O sistema de 2ª instância (certidoes.tjsp.jus.br) é separado e EXIGE conta gov.br nível '
+            'prata/ouro — não é o link usado aqui. Emissão real usa a plataforma SAJ (esaj.tjsp.jus.br), a mesma '
+            'bloqueada por robots.txt no TJBA — automação não é opção, só preenchimento manual mesmo.'
         ),
     ),
     'tjse_certidoes': CertificateSource(
