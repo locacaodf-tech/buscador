@@ -101,7 +101,8 @@ def login_submit(request: Request, password: str = Form(...)):
             {'request': request, 'error': 'Senha incorreta.'},
             status_code=401,
         )
-    token = create_session_token(settings.app_secret)
+    token_ttl_seconds = 60 * 60 * 24 * max(1, settings.session_ttl_days)
+    token = create_session_token(settings.app_secret, ttl_seconds=token_ttl_seconds)
     response = RedirectResponse(url='/', status_code=303)
     response.set_cookie(
         SESSION_COOKIE_NAME,
@@ -109,7 +110,7 @@ def login_submit(request: Request, password: str = Form(...)):
         httponly=True,
         samesite='lax',
         secure=settings.app_env != 'local',
-        max_age=60 * 60 * 24 * 14,
+        max_age=token_ttl_seconds,
     )
     return response
 
@@ -248,7 +249,7 @@ async def portal_automation_solve(session_id: str, request: PortalAutomationSolv
 @app.post('/api/stj-precatorios/upload-xlsx', dependencies=[Depends(verify_internal_token)])
 async def stj_upload_xlsx(file: UploadFile = File(...)):
     """Recebe o XLSX oficial do STJ baixado manualmente (processo/precatorios
-    em stj.jus.br), salva em pasta local controlada (data/stj_uploads/) e
+    em stj.jus.br), salva em pasta local controlada (STJ_UPLOAD_DIR) e
     devolve um raio-x do arquivo: abas, cabeçalho encontrado, campos
     detectados e quantas linhas foram lidas. Não faz busca ainda — isso é
     o endpoint /api/stj-precatorios/search, separado.
