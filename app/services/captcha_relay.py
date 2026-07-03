@@ -102,7 +102,14 @@ async def start_browser_session(
     page = await browser.new_page()
 
     try:
-        await page.goto(url, wait_until='networkidle', timeout=30000)
+        if url.startswith('file://'):
+            # Alguns ambientes bloqueiam page.goto(file://...) por política de administrador.
+            # Para testes locais com fixture HTML, carregamos o conteúdo diretamente.
+            from pathlib import Path as _Path
+            file_path = _Path(url.removeprefix('file://'))
+            await page.set_content(file_path.read_text(encoding='utf-8'), wait_until='domcontentloaded')
+        else:
+            await page.goto(url, wait_until='networkidle', timeout=30000)
     except Exception as exc:
         await browser.close()
         await pw.stop()
