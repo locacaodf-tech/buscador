@@ -2,7 +2,7 @@ services:
   - type: web
     name: buscador-processos
     runtime: docker
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: APP_ENV
@@ -10,7 +10,7 @@ services:
       - key: APP_SECRET
         generateValue: true
       - key: DATABASE_URL
-        value: sqlite:////data/buscador_processos.db
+        value: sqlite:///./buscador_processos.db
       - key: DATAJUD_API_KEY
         sync: false
       - key: DATAJUD_BASE_URL
@@ -31,7 +31,3 @@ services:
         sync: false
       - key: APP_LOGIN_PASSWORD
         sync: false
-    disk:
-      name: buscador-data
-      mountPath: /data
-      sizeGB: 1
