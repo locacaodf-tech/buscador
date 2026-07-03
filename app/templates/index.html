@@ -1,162 +1,1895 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Claude Buscador de Processos</title>
-  <link rel="stylesheet" href="/static/style.css" />
-</head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Buscador Interno de Processos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy-950: #0b1f3d;
+    --navy-800: #132b52;
+    --navy-600: #2c4570;
+    --paper: #ffffff;
+    --paper-muted: #f5f7fb;
+    --gold: #b8894a;
+    --gold-soft: #f0e3ce;
+    --ink: #0b1f3d;
+    --ink-soft: #5b6b85;
+    --border: #e3e8f1;
+    --danger: #b42318;
+    --danger-bg: #fdecea;
+    --success: #1c7c4f;
+    --success-bg: #e9f7ef;
+    --radius: 14px;
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    color: var(--ink);
+    background: var(--paper-muted);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 680px; margin: 0 auto; padding: 0 16px 64px; }
+
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* ---------- Header ---------- */
+  header.top {
+    background: var(--paper);
+    border-bottom: 3px solid var(--gold);
+    padding: 28px 16px 22px;
+    margin-bottom: 20px;
+  }
+  header.top .inner { max-width: 680px; margin: 0 auto; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  header.top h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 27px;
+    margin: 0 0 6px;
+    color: var(--navy-950);
+    letter-spacing: -0.01em;
+  }
+  header.top p { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.5; max-width: 46ch; }
+
+  .mode-pill {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    padding: 7px 12px;
+    border-radius: 999px;
+    white-space: nowrap;
+    transition: background-color .25s ease, color .25s ease, border-color .25s ease;
+    border: 1.5px solid var(--gold);
+    color: var(--gold);
+    background: var(--gold-soft);
+  }
+  .mode-pill.real { border-color: var(--navy-800); color: var(--paper); background: var(--navy-800); }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 2px rgba(11,31,61,.04);
+  }
+  .card h2 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--navy-800);
+    margin: 0 0 16px;
+  }
+
+  details.config-card summary { cursor: pointer; list-style: none; }
+  details.config-card summary::-webkit-details-marker { display: none; }
+  details.config-card summary .summary-row { display: flex; justify-content: space-between; align-items: center; }
+  details.config-card summary h2 { margin: 0; }
+  details.config-card .chevron { color: var(--ink-soft); transition: transform .2s ease; font-size: 12px; }
+  details.config-card[open] .chevron { transform: rotate(180deg); }
+  details.config-card .config-body { margin-top: 16px; }
+
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--navy-800); margin: 14px 0 6px; }
+  label:first-child { margin-top: 0; }
+  label .hint { font-weight: 400; color: var(--ink-soft); font-size: 12px; }
+
+  input[type=text], input[type=password], select, textarea {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: 16px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  textarea { font-family: var(--font-mono); font-size: 13px; resize: vertical; min-height: 76px; }
+  select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--ink-soft) 50%), linear-gradient(135deg, var(--ink-soft) 50%, transparent 50%); background-position: calc(100% - 18px) center, calc(100% - 13px) center; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 32px; }
+  small.field-note { display: block; margin-top: 5px; font-size: 12px; color: var(--ink-soft); }
+
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 480px) { .row-2 { grid-template-columns: 1fr; } }
+
+  .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  button {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 12px 18px;
+    min-height: 44px;
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: filter .15s ease, background-color .15s ease;
+  }
+  button.primary { background: var(--navy-950); color: var(--paper); flex: 1 1 140px; }
+  button.primary:hover { filter: brightness(1.15); }
+  button.secondary { background: var(--paper); color: var(--navy-800); border-color: var(--border); flex: 1 1 140px; }
+  button.secondary:hover { background: var(--paper-muted); }
+  button.ghost { background: transparent; color: var(--ink-soft); border-color: transparent; flex: 0 0 auto; padding-left: 10px; padding-right: 10px; }
+  button.ghost:hover { color: var(--danger); }
+  button:disabled { opacity: .55; cursor: default; filter: none; }
+
+  /* ---------- Results ---------- */
+  #resultsArea { min-height: 4px; }
+  .empty-state { text-align: center; color: var(--ink-soft); font-size: 14px; padding: 30px 10px; }
+  .empty-state .glyph { font-size: 28px; display: block; margin-bottom: 8px; opacity: .5; }
+
+  .loading { display: flex; align-items: center; gap: 10px; color: var(--ink-soft); font-size: 14px; padding: 8px 2px; }
+  .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--gold); animation: spin .7s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box { background: var(--danger-bg); border: 1px solid #f3c6c1; color: var(--danger); border-radius: 10px; padding: 12px 14px; font-size: 13.5px; line-height: 1.5; }
+
+  .status-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .chip { font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: 999px; background: var(--paper-muted); border: 1px solid var(--border); color: var(--navy-800); }
+  .chip.status-completed { background: var(--success-bg); border-color: #bfe3cd; color: var(--success); }
+
+  .warnings { margin-bottom: 14px; }
+  .warning-item { font-size: 13px; color: #8a5a12; background: #fdf3e3; border: 1px solid #f2ddb0; border-radius: 8px; padding: 9px 11px; margin-bottom: 6px; line-height: 1.5; }
+
+  .result-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    animation: rise .3s ease both;
+  }
+  @media (prefers-reduced-motion: reduce) { .result-card { animation: none; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .result-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .result-top .numero { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--navy-950); word-break: break-all; }
+  .result-top .tribunal { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--ink-soft); text-transform: uppercase; margin-top: 3px; }
+
+  .result-meta { margin-top: 10px; font-size: 13px; color: var(--ink-soft); line-height: 1.6; }
+  .result-meta b { color: var(--ink); font-weight: 600; }
+
+  .section-label { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+
+  .official-block {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: linear-gradient(180deg, var(--gold-soft) 0%, rgba(240,227,206,.35) 100%);
+    border: 1px solid #e6d3ac;
+  }
+  .status-chip { display: inline-block; font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--paper); border: 1px solid var(--border); color: var(--navy-800); margin-bottom: 10px; }
+  .status-chip.success { background: var(--success-bg); border-color: #bfe3cd; color: var(--success); }
+  .status-chip.danger { background: var(--danger-bg); border-color: #f3c6c1; color: var(--danger); }
+  .status-chip.highlight { background: var(--gold); border-color: #8a6329; color: #fff; }
+  .status-chip.muted { background: var(--paper-muted); border-color: var(--border); color: var(--ink-soft); }
+
+  .source-group { margin-bottom: 10px; }
+  .source-group summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--navy-800); padding: 8px 0; list-style: none; }
+  .source-group summary::-webkit-details-marker { display: none; }
+  .source-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .source-row:last-child { border-bottom: none; }
+  .source-row .name { color: var(--ink); }
+  .summary-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+
+  .official-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-top: 4px; }
+  @media (max-width: 480px) { .official-grid { grid-template-columns: 1fr; } }
+  .official-field { font-size: 13px; }
+  .official-field-label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-soft); }
+  .official-field-value { color: var(--ink); font-weight: 600; }
+
+  .parties-row { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #d9c397; font-size: 13px; }
+  .parties-row > div { margin-bottom: 4px; }
+  .party-label { display: inline-block; min-width: 90px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ink-soft); }
+
+  .fonte-row { margin-top: 10px; font-size: 12px; color: var(--ink-soft); word-break: break-all; }
+  .fonte-row a { color: var(--navy-800); }
+
+  details.raw-text { margin-top: 12px; }
+  details.raw-text summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+  details.raw-text p { font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; margin-top: 6px; background: var(--paper-muted); padding: 10px; border-radius: 8px; }
+
+  .flags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .flag-tag { font-size: 11px; background: var(--paper-muted); border: 1px solid var(--border); color: var(--navy-800); padding: 4px 9px; border-radius: 999px; }
+
+  /* Selo de indício de precatório — elemento de assinatura */
+  .seal {
+    flex-shrink: 0;
+    width: 58px; height: 58px;
+    border-radius: 50%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 35% 30%, #d9b06e, var(--gold) 65%, #9c6f36 100%);
+    border: 2px solid #8a6329;
+    box-shadow: 0 2px 5px rgba(139, 99, 41, .35), inset 0 0 0 3px rgba(255,255,255,.18);
+    color: #fff;
+    text-align: center;
+  }
+  .seal .num { font-family: var(--font-display); font-weight: 700; font-size: 18px; line-height: 1; }
+  .seal .lbl { font-size: 7px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-top: 2px; opacity: .92; }
+  .seal.none { background: var(--paper-muted); border-color: var(--border); color: var(--ink-soft); box-shadow: none; }
+  .seal.none .num { color: var(--ink-soft); }
+
+  .cap-provider { margin-bottom: 14px; }
+
+  .stj-hint { font-size: 13px; color: var(--ink-soft); margin: -6px 0 14px; line-height: 1.5; }
+  input[type=file] {
+    width: 100%; font-size: 13px; padding: 10px; border: 1px dashed var(--border);
+    border-radius: 10px; background: var(--paper-muted); color: var(--ink-soft);
+  }
+  .stj-upload-ok {
+    margin-top: 12px; padding: 12px 14px; border-radius: 10px;
+    background: var(--success-bg); border: 1px solid #bfe3cd; font-size: 13px; color: var(--ink);
+  }
+  .stj-upload-ok .title { font-weight: 700; color: var(--success); margin-bottom: 6px; }
+  .stj-sheet-row { padding: 4px 0; font-size: 12.5px; color: var(--ink-soft); }
+  .stj-not-loaded {
+    text-align: center; padding: 26px 16px; color: var(--ink-soft); font-size: 14px;
+    background: var(--paper); border: 1px dashed var(--border); border-radius: 12px;
+  }
+  .stj-not-loaded b { display: block; color: var(--navy-800); font-size: 15px; margin-bottom: 4px; }
+  .stj-result-card {
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px;
+    background: var(--paper);
+  }
+  .stj-result-card .stj-value { font-family: var(--font-display); font-weight: 700; font-size: 22px; color: var(--navy-950); }
+  .stj-provenance {
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
+    font-size: 11.5px; color: var(--ink-soft); line-height: 1.7;
+  }
+  .stj-provenance b { color: var(--navy-800); }
+  .cap-provider h3 { font-size: 14px; margin: 0 0 6px; color: var(--navy-950); }
+  .cap-types { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .hist-row { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .hist-row:last-child { border-bottom: none; }
+  .hist-row .l { color: var(--ink-soft); }
+  .hist-row .r { text-align: right; color: var(--navy-800); font-weight: 600; }
+
+  footer.foot { text-align: center; color: var(--ink-soft); font-size: 12px; margin-top: 24px; line-height: 1.6; }
+
+  /* ---------- Abas ---------- */
+  .tabbar {
+    display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding: 4px; margin-bottom: 16px; background: var(--paper); border: 1px solid var(--border);
+    border-radius: 12px; position: sticky; top: 8px; z-index: 5;
+  }
+  .tab-btn {
+    flex: 0 0 auto; font-family: var(--font-body); font-size: 13px; font-weight: 600;
+    padding: 10px 14px; border-radius: 9px; border: none; background: transparent;
+    color: var(--ink-soft); cursor: pointer; white-space: nowrap;
+  }
+  .tab-btn.active { background: var(--navy-950); color: #fff; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ---------- Diligência diária ---------- */
+  .diligencia-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+  @media (max-width: 480px) { .diligencia-actions { grid-template-columns: 1fr; } }
+  .diligencia-actions button { min-height: 52px; }
+  .diligencia-hint { font-size: 13px; color: var(--ink-soft); line-height: 1.6; margin: -4px 0 16px; }
+
+  /* ---------- Certidões ---------- */
+  .cert-source-card {
+    border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; cursor: pointer;
+  }
+  .cert-source-card:hover { background: var(--paper-muted); }
+  .cert-source-card.selected { border-color: var(--gold); background: var(--gold-soft); }
+  .cert-source-card .name { font-weight: 700; font-size: 13.5px; color: var(--navy-950); }
+  .cert-source-card .orgao { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .cert-status-badge {
+    flex-shrink: 0; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 5px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .cert-status-badge.pronto { background: var(--success-bg); color: var(--success); border: 1px solid #bfe3cd; }
+  .cert-status-badge.configuravel { background: var(--gold-soft); color: #8a6329; border: 1px solid #e6d3ac; }
+  .cert-status-badge.credencial, .cert-status-badge.contrato { background: var(--danger-bg); color: var(--danger); border: 1px solid #f3c6c1; }
+  .cert-status-badge.mapeamento { background: var(--paper-muted); color: var(--ink-soft); border: 1px solid var(--border); }
+  .cert-status-badge.captcha { background: #fdf3e3; color: #8a5a12; border: 1px solid #f2ddb0; }
+  .cert-status-badge.naopesquisado { background: var(--paper-muted); color: var(--ink-soft); border: 1px dashed var(--border); }
+
+  .cert-result-box { margin-top: 16px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); }
+  .cert-result-box .status-line { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+
+  /* ---------- Fontes (resumo consolidado /api/sources) ---------- */
+  .fontes-overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  @media (max-width: 560px) { .fontes-overview-grid { grid-template-columns: 1fr; } }
+  .fontes-overview-card { border-radius: 12px; padding: 14px; text-align: center; border: 1px solid var(--border); }
+  .fontes-overview-card .num { font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--navy-950); }
+  .fontes-overview-card .lbl { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
+
+  /* ---------- Dossiê ---------- */
+  .dossier-note { padding: 12px 14px; border-radius: 10px; background: var(--gold-soft); border: 1px solid #e6d3ac; font-size: 13px; color: #6b4d1f; margin-bottom: 14px; line-height: 1.6; }
+  .dossier-layer { border-left: 3px solid var(--border); padding: 8px 0 8px 12px; margin-bottom: 8px; }
+  .dossier-layer .layer-title { font-weight: 700; font-size: 12.5px; color: var(--navy-800); text-transform: uppercase; letter-spacing: .03em; }
+  .dossier-layer .layer-goal { font-size: 13px; color: var(--ink); margin: 3px 0; }
+  .dossier-layer .layer-sources { font-size: 11.5px; color: var(--ink-soft); }
+  .pendencias-box { padding: 12px 14px; border-radius: 10px; background: var(--danger-bg); border: 1px solid #f3c6c1; margin-top: 12px; }
+  .pendencias-box .title { font-weight: 700; color: var(--danger); font-size: 12.5px; text-transform: uppercase; margin-bottom: 6px; }
+
+  /* ================= MODO SIMPLES ================= */
+  .mode-toggle {
+    display: flex; gap: 4px; padding: 4px; background: var(--paper); border: 1px solid var(--border);
+    border-radius: 999px; margin: 14px 0 18px;
+  }
+  .mode-toggle-btn {
+    flex: 1; font-family: var(--font-body); font-size: 14px; font-weight: 700; padding: 12px 10px;
+    border-radius: 999px; border: none; background: transparent; color: var(--ink-soft); cursor: pointer;
+  }
+  .mode-toggle-btn.active { background: var(--navy-950); color: #fff; }
+
+  /* Em modo simples, esconde tudo que é avançado — abas, config técnica */
+  body.simple-mode .tabbar, body.simple-mode #configCard, body.simple-mode .tab-panel { display: none !important; }
+  #simplePanel { display: none; }
+  body.simple-mode #simplePanel { display: block; }
+
+  .simple-card {
+    background: var(--paper); border-radius: 20px; padding: 28px 22px; margin-bottom: 18px;
+    box-shadow: 0 2px 10px rgba(11,31,61,.08); border: 1px solid var(--border);
+  }
+  .simple-title { font-family: var(--font-display); font-size: 27px; font-weight: 700; color: var(--navy-950); margin: 0 0 10px; line-height: 1.25; }
+  .simple-subtitle { font-size: 17px; color: var(--ink-soft); line-height: 1.6; margin: 0 0 24px; }
+  .simple-input {
+    width: 100%; font-size: 22px; padding: 20px 18px; border: 2px solid var(--border); border-radius: 14px;
+    margin-bottom: 18px; font-family: var(--font-body); color: var(--ink);
+  }
+  .simple-input:focus { border-color: var(--gold); outline: none; }
+  .simple-button {
+    width: 100%; font-size: 22px; font-weight: 700; padding: 22px; border-radius: 14px;
+    background: var(--navy-950); color: #fff; border: none; min-height: 68px; cursor: pointer;
+  }
+  .simple-button:active { filter: brightness(1.25); }
+  .simple-secondary-links { text-align: center; margin-top: 20px; font-size: 16px; }
+  .simple-secondary-links a { color: var(--navy-800); text-decoration: underline; display: block; margin-top: 10px; }
+
+  .simple-loading { font-size: 19px; color: var(--ink-soft); display: flex; align-items: center; gap: 12px; padding: 14px 4px; }
+  .simple-loading .spinner { width: 22px; height: 22px; border-width: 3px; }
+  .simple-message {
+    font-size: 19px; line-height: 1.6; padding: 22px; border-radius: 16px; text-align: center;
+  }
+  .simple-message.info { background: var(--paper-muted); color: var(--navy-800); }
+  .simple-message.error { background: var(--danger-bg); color: var(--danger); }
+  .simple-demo-banner {
+    font-size: 16px; background: var(--gold-soft); color: #6b4d1f; padding: 14px 16px;
+    border-radius: 12px; margin-bottom: 16px; line-height: 1.5; text-align: center; font-weight: 600;
+  }
+  .simple-result-card {
+    background: var(--paper); border: 2px solid var(--border); border-radius: 18px;
+    padding: 22px; margin-bottom: 16px;
+  }
+  .simple-result-headline {
+    font-family: var(--font-display); font-size: 21px; font-weight: 700; color: var(--navy-950);
+    margin-bottom: 14px; padding-bottom: 12px; border-bottom: 2px solid var(--gold-soft);
+  }
+  .simple-field { font-size: 18px; line-height: 1.9; }
+  .simple-field-label { color: var(--ink-soft); font-weight: 600; }
+  .simple-field-value { color: var(--ink); font-weight: 700; }
+
+  .cert-tribunal-card {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 16px 18px; border: 2px solid var(--border); border-radius: 14px; margin-bottom: 10px;
+    cursor: pointer; font-size: 18px; font-weight: 700; color: var(--navy-950);
+  }
+  .cert-tribunal-card:active, .cert-tribunal-card.selected { border-color: var(--gold); background: var(--gold-soft); }
+  .cert-tribunal-card .badge-confirmado { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--success-bg); color: var(--success); }
+  .cert-tribunal-card .badge-aproximado { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--paper-muted); color: var(--ink-soft); }
+
+  .cert-field-block { margin-top: 20px; padding-top: 18px; border-top: 2px solid var(--gold-soft); }
+  .cert-field-block label { font-size: 16px; font-weight: 700; color: var(--navy-800); margin: 14px 0 6px; display: block; }
+  .cert-field-block input {
+    width: 100%; font-size: 18px; padding: 14px; border: 2px solid var(--border); border-radius: 12px;
+  }
+  .cert-summary-box {
+    margin-top: 18px; background: var(--paper-muted); border-radius: 14px; padding: 18px; font-size: 17px; line-height: 2;
+  }
+  .cert-official-link {
+    display: block; text-align: center; margin-top: 18px; padding: 20px; border-radius: 14px;
+    background: var(--navy-950); color: #fff; font-size: 19px; font-weight: 700; text-decoration: none;
+  }
+  .cert-note-approx {
+    font-size: 15px; color: var(--ink-soft); background: var(--paper-muted); padding: 12px 14px;
+    border-radius: 10px; margin-top: 14px; line-height: 1.6;
+  }
+</style>
 <body>
-  <main class="container">
-    <section class="hero">
+
+<header class="top">
+  <div class="inner">
+    <div>
+      <h1>Buscador Interno de Processos</h1>
+      <p>Diligência diária: processo, precatório, RPV, LOA e certidões num só lugar.</p>
+      {% if login_enabled %}
+      <a href="/logout" style="display:inline-block; margin-top:8px; font-size:14px; color:var(--ink-soft); text-decoration:underline;">Sair</a>
+      {% endif %}
+    </div>
+    <span class="mode-pill real" id="modePill">Conectado</span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="mode-toggle">
+    <button class="mode-toggle-btn active" id="btnModeSimple" type="button">Modo simples</button>
+    <button class="mode-toggle-btn" id="btnModeAvancado" type="button">Modo avançado</button>
+  </div>
+
+  <section class="simple-card" id="simplePanel">
+    <h2 class="simple-title">O que você quer descobrir?</h2>
+    <p class="simple-subtitle">Digite um nome, CPF, CNPJ, CNJ ou número de precatório/sequencial. Depois escolha o que fazer com ele. <b>"Montar Dossiê"</b> já busca o processo E verifica se há indício de precatório, sozinho.</p>
+    <input type="text" id="simpleSearchKey" class="simple-input" placeholder="Nome, CPF, CNPJ ou número do processo" autocomplete="off" />
+    <div class="diligencia-actions">
+      <button class="primary" id="btnSimpleDossie" type="button">Montar Dossiê</button>
+      <button class="secondary" id="btnSimpleCertidoes" type="button">Consultar Certidões</button>
+      <button class="secondary" id="btnSimplePrecatorio" type="button">Consultar Precatório/STJ</button>
+      <button class="secondary" id="btnSimpleFontes" type="button">Ver Fontes</button>
+    </div>
+  </section>
+  <section id="simpleResultsArea"></section>
+
+  <section class="simple-card" id="simpleCertPanel" style="display:none;">
+    <a href="#" id="linkCertVoltar" style="font-size:16px; color:var(--navy-800);">← Voltar</a>
+    <h2 class="simple-title" style="margin-top:14px;">Certidão</h2>
+    <p class="simple-subtitle">Escolha o tribunal. A gente mostra exatamente o que ele pede.</p>
+    <div id="certTribunalList"></div>
+    <div id="certFieldsArea"></div>
+  </section>
+
+  <nav class="tabbar" role="tablist">
+    <button class="tab-btn active" data-tab="precatorio" type="button">Precatório/RPV</button>
+    <button class="tab-btn" data-tab="stj" type="button">STJ</button>
+    <button class="tab-btn" data-tab="certidoes" type="button">Certidões</button>
+    <button class="tab-btn" data-tab="fontes" type="button">Fontes</button>
+  </nav>
+
+  <!-- ===== Aba: Precatório/RPV (busca completa existente) ===== -->
+  <div class="tab-panel active" id="tab-precatorio">
+  <section class="card">
+    <h2>Nova busca</h2>
+
+    <div class="row-2">
       <div>
-        <p class="eyebrow">Uso interno</p>
-        <h1>Claude Buscador de Processos</h1>
-        <p>Busca flexível por nome, CPF, CNPJ, OAB, número do processo/CNJ, requisitório, precatório ou RPV. Cada API/conector declara quais campos aceita.</p>
-        {% if login_enabled %}
-        <a href="/logout" style="display:inline-block; margin-top:12px; color:white; opacity:.85; text-decoration:underline; font-size:14px;">Sair</a>
-        {% endif %}
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Nova busca</h2>
-      <form id="searchForm">
-        <label>Token interno (X-Internal-Token) — opcional</label>
-        <input type="password" id="internal_token" placeholder="Preencha somente se INTERNAL_API_TOKEN estiver ativo no servidor" autocomplete="off" />
-        <small>Fica salvo apenas neste navegador (localStorage). {% if login_enabled %}Se você já entrou pela tela de login, pode deixar vazio — a sessão já autoriza as buscas.{% else %}Deixe vazio se o servidor não exigir token.{% endif %}</small>
-
-        <label>Tipo de identificador</label>
-        <select name="search_type" id="search_type">
-          <option value="auto">Automático / detectar pelo que eu informar</option>
-          <option value="cnj">Número CNJ</option>
-          <option value="numero_processo">Número do processo</option>
-          <option value="cpf">CPF</option>
-          <option value="cnpj">CNPJ</option>
-          <option value="name">Nome da parte</option>
-          <option value="oab">OAB</option>
-          <option value="requisitorio_number">Número do requisitório</option>
-          <option value="precatorio_number">Número do precatório</option>
-          <option value="rpv_number">Número da RPV</option>
-          <option value="precatorio_scan">Varredura de indícios de precatório/RPV</option>
-        </select>
-
-        <label>Identificador / chave de busca</label>
-        <input name="search_key" id="search_key" placeholder="Nome, CPF, CNJ, processo, requisitório, precatório, RPV, OAB..." />
-
-        <label>Provedor</label>
-        <select name="provider" id="provider">
-          <option value="auto">Auto</option>
-          <option value="multi">Tentar múltiplos compatíveis</option>
+        <label for="provider">Provedor</label>
+        <select id="provider">
+          <option value="auto">Automático</option>
           <option value="datajud">DataJud/CNJ</option>
           <option value="judit">Judit</option>
-          <option value="tribunal_precatorios">API oficial de precatórios/SisPreq/PDPJ/TRF/TJ</option>
+          <option value="cjf_trf_precatorios">CJF/TRF Precatórios</option>
         </select>
+      </div>
+      <div>
+        <label for="searchType">Tipo de busca</label>
+        <select id="searchType">
+          <option value="auto">Automático</option>
+          <option value="cpf">CPF</option>
+          <option value="cnpj">CNPJ</option>
+          <option value="oab">OAB</option>
+          <option value="cnj">Número CNJ</option>
+          <option value="name">Nome</option>
+          <option value="numero_processo">Número do processo</option>
+          <option value="requisitorio">Requisitório</option>
+          <option value="precatorio">Precatório</option>
+          <option value="rpv">RPV</option>
+        </select>
+      </div>
+    </div>
 
-        <label>Tribunais separados por vírgula</label>
-        <input name="tribunals" id="tribunals" placeholder="TRF1, TRF2, TJDFT, TRT10" />
-        <small>Vazio = TRFs. Para precatórios, sugiro começar por: {{ default_precat_tribunals | join(', ') }}</small>
+    <label for="searchKey">Valor pesquisado</label>
+    <input type="text" id="searchKey" placeholder="Ex.: 0032681-47.2017.4.01.3400" autocomplete="off" />
 
-        <label>Parâmetros extras exigidos pela API/tribunal</label>
-        <textarea name="extra_params" id="extra_params" rows="5" placeholder='JSON opcional. Ex.: {"uf":"DF", "data_nascimento":"1980-01-01", "ano_orcamento":2027, "entidade_devedora":"União"}'></textarea>
-        <small>Use quando o provedor exigir UF da OAB, data de nascimento, nome da mãe, ano-orçamento, entidade devedora, CPF complementar etc.</small>
+    <div class="row-2">
+      <div>
+        <label for="uf">UF <span class="hint">— opcional</span></label>
+        <select id="uf">
+          <option value="">—</option>
+          <option>AC</option><option>AL</option><option>AP</option><option>AM</option>
+          <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
+          <option>GO</option><option>MA</option><option>MT</option><option>MS</option>
+          <option>MG</option><option>PA</option><option>PB</option><option>PR</option>
+          <option>PE</option><option>PI</option><option>RJ</option><option>RN</option>
+          <option>RS</option><option>RO</option><option>RR</option><option>SC</option>
+          <option>SP</option><option>SE</option><option>TO</option>
+        </select>
+      </div>
+      <div>
+        <label for="tribunalFiltro">Tribunal <span class="hint">— opcional</span></label>
+        <select id="tribunalFiltro">
+          <option value="">—</option>
+          <option>TRF1</option><option>TRF2</option><option>TRF3</option>
+          <option>TRF4</option><option>TRF5</option><option>TRF6</option>
+        </select>
+      </div>
+    </div>
 
-        <div class="row">
-          <label><input type="checkbox" id="precatorio_only" /> Mostrar só indícios de precatório/RPV</label>
-          <label><input type="checkbox" id="include_raw" /> Incluir JSON bruto</label>
+    <div class="row-2">
+      <div>
+        <label for="anoOrcamento">Ano-orçamento <span class="hint">— opcional</span></label>
+        <input type="text" inputmode="numeric" id="anoOrcamento" placeholder="2027" />
+      </div>
+      <div>
+        <label for="dataNascimento">Data de nascimento <span class="hint">— opcional</span></label>
+        <input type="date" id="dataNascimento" />
+      </div>
+    </div>
+
+    <label for="entidadeDevedora">Entidade devedora <span class="hint">— opcional</span></label>
+    <input type="text" id="entidadeDevedora" placeholder="Ex.: União, INSS, Distrito Federal" autocomplete="off" />
+
+    <label for="nomeMae">Nome da mãe <span class="hint">— opcional</span></label>
+    <input type="text" id="nomeMae" autocomplete="off" />
+
+    <details class="config-card" id="advancedCard" style="margin-top: 14px;">
+      <summary>
+        <div class="summary-row">
+          <h2 style="font-size:12px;">Parâmetros avançados (JSON)</h2>
+          <span class="chevron">▾</span>
         </div>
+      </summary>
+      <div class="config-body">
+        <textarea id="extraParamsAdvanced" placeholder='{"campo_especifico":"valor"}'></textarea>
+        <small class="field-note">Só para casos que os campos acima não cobrem. Se preencher aqui, isso é combinado com os campos simples (o avançado tem prioridade em caso de conflito).</small>
+      </div>
+    </details>
 
-        <button type="submit">Buscar</button>
-        <button type="button" id="capabilitiesBtn" class="secondary">Ver capacidades das APIs</button>
-      </form>
-    </section>
+    <div class="btn-row">
+      <button class="primary" id="btnSearch">Buscar</button>
+      <button class="secondary" id="btnCapabilities">Ver capacidades das APIs</button>
+      <button class="secondary" id="btnHistory">Ver histórico</button>
+      <button class="ghost" id="btnClear" type="button">Limpar</button>
+    </div>
+  </section>
 
+  <section id="resultsArea">
+    <div class="empty-state" id="emptyState">
+      <span class="glyph">⚖</span>
+      Preencha os campos acima e toque em Buscar.<br>Sem URL de backend, o resultado é uma demonstração.
+    </div>
+  </section>
+  </div>
+
+  <!-- ===== Aba: STJ ===== -->
+  <div class="tab-panel" id="tab-stj">
+  <section class="card" id="stjCard">
+    <h2>STJ — Precatórios</h2>
+    <p class="stj-hint">Consulta baseada no arquivo oficial XLSX do STJ que você carregar aqui — nunca em dado fictício. Sem arquivo carregado, a busca sempre diz isso claramente.</p>
+
+    <label for="stjFile">Arquivo XLSX oficial do STJ</label>
+    <input type="file" id="stjFile" accept=".xlsx,.xlsm,.xls" />
+    <div class="btn-row">
+      <button class="secondary" id="btnStjUpload" type="button">Enviar XLSX do STJ</button>
+    </div>
+    <div id="stjUploadStatus"></div>
+
+    <div class="row-2" style="margin-top:16px;">
+      <div>
+        <label for="stjSearchType">Buscar por</label>
+        <select id="stjSearchType">
+          <option value="sequencial">Sequencial</option>
+          <option value="numero_processo">Número do processo (CNJ)</option>
+        </select>
+      </div>
+      <div>
+        <label for="stjAnoOrcamento">Ano-orçamento <span class="hint">— opcional</span></label>
+        <input type="text" inputmode="numeric" id="stjAnoOrcamento" placeholder="2027" />
+      </div>
+    </div>
+    <label for="stjSearchKey">Valor pesquisado</label>
+    <input type="text" id="stjSearchKey" placeholder="Ex.: 15547" autocomplete="off" />
+    <div class="btn-row">
+      <button class="primary" id="btnStjSearch">Buscar no STJ</button>
+    </div>
+  </section>
+
+  <section id="stjResultsArea"></section>
+  </div>
+
+  <!-- ===== Aba: Certidões ===== -->
+  <div class="tab-panel" id="tab-certidoes">
     <section class="card">
-      <h2>Resultado</h2>
-      <pre id="output">Aguardando busca...</pre>
+      <h2>Certidões</h2>
+      <p class="diligencia-hint">Toque numa fonte pra ver o status real e solicitar. Nada aqui mostra "negativa"/"positiva" sem documento oficial — sem isso, a resposta é sempre honesta sobre o que falta.</p>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="secondary" id="btnCertLoadSources" type="button">Carregar fontes de certidão</button>
+      </div>
+      <div id="certSourcesList" style="margin-top:14px;"></div>
     </section>
-  </main>
+
+    <section class="card" id="certRequestCard" style="display:none;">
+      <h2>Solicitar certidão</h2>
+      <div id="certSelectedSourceLabel" style="font-size:13px; color:var(--ink-soft); margin-top:-8px; margin-bottom:12px;"></div>
+
+      <label for="certType">Tipo de certidão</label>
+      <select id="certType"></select>
+
+      <label for="certDocument">CPF ou CNPJ <span class="hint">— quando exigido</span></label>
+      <input type="text" id="certDocument" placeholder="Só números ou com pontuação" autocomplete="off" />
+
+      <label for="certName">Nome <span class="hint">— quando exigido</span></label>
+      <input type="text" id="certName" autocomplete="off" />
+
+      <div class="btn-row">
+        <button class="primary" id="btnCertRequest" type="button">Solicitar certidão</button>
+      </div>
+      <div id="certResultArea"></div>
+    </section>
+  </div>
+
+  <!-- ===== Aba: Fontes (visão consolidada /api/sources) ===== -->
+  <div class="tab-panel" id="tab-fontes">
+    <section class="card">
+      <h2>Fontes e APIs</h2>
+      <p class="diligencia-hint">Tudo que o backend conhece: precatório oficial, certidões e APIs processuais/comerciais — sempre com status real, nunca escondendo o que ainda não foi pesquisado.</p>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="primary" id="btnFontesLoad" type="button">Carregar fontes</button>
+      </div>
+    </section>
+    <section id="fontesResultsArea"></section>
+  </div>
+
+</main>
+
+<footer class="foot">
+  Uso interno. Nenhuma chave de API trafega por esta tela.<br>
+  Modo demonstração usa dados fictícios só para pré-visualização.
+</footer>
 
 <script>
-const form = document.getElementById('searchForm');
-const output = document.getElementById('output');
-const capabilitiesBtn = document.getElementById('capabilitiesBtn');
-const internalTokenInput = document.getElementById('internal_token');
+(function () {
+  'use strict';
 
-const TOKEN_STORAGE_KEY = 'buscador_processos_internal_token';
-const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
-if (savedToken) internalTokenInput.value = savedToken;
+  const el = (id) => document.getElementById(id);
+  const modePill = el('modePill');
+  const resultsArea = el('resultsArea');
 
-internalTokenInput.addEventListener('change', () => {
-  const value = internalTokenInput.value.trim();
-  if (value) localStorage.setItem(TOKEN_STORAGE_KEY, value);
-  else localStorage.removeItem(TOKEN_STORAGE_KEY);
-});
+  // Este arquivo é servido PELO PRÓPRIO backend (mesma origem) — não existe
+  // mais "configurar URL/token", a chamada é sempre relativa ao mesmo
+  // servidor, e a sessão de login (cookie) já autoriza as chamadas de API.
+  function backendUrl() { return ''; }
+  function token() { return ''; }
+  function isDemo() { return false; }
 
-function buildHeaders(extra) {
-  const headers = Object.assign({}, extra || {});
-  const token = internalTokenInput.value.trim();
-  if (token) headers['X-Internal-Token'] = token;
-  return headers;
-}
-
-function readExtraParams() {
-  const raw = document.getElementById('extra_params').value.trim();
-  if (!raw) return {};
-  try { return JSON.parse(raw); }
-  catch (err) { throw new Error('JSON inválido em parâmetros extras: ' + err.message); }
-}
-
-async function handleResponse(res) {
-  if (res.status === 401) {
-    output.textContent = 'HTTP 401: token interno ausente ou inválido. Confira o campo "Token interno" acima e o valor de INTERNAL_API_TOKEN no servidor.';
-    return;
+  function updateModePill() {
+    modePill.textContent = 'Conectado';
+    modePill.classList.add('real');
   }
-  if (!res.ok) {
-    const text = await res.text();
-    output.textContent = `Erro HTTP ${res.status}: ${text}`;
-    return;
-  }
-  const data = await res.json();
-  output.textContent = JSON.stringify(data, null, 2);
-}
+  updateModePill();
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  output.textContent = 'Consultando...';
-  try {
-    const tribunals = document.getElementById('tribunals').value
-      .split(',').map(s => s.trim()).filter(Boolean);
-    const body = {
-      provider: document.getElementById('provider').value,
-      search_type: document.getElementById('search_type').value,
-      search_key: document.getElementById('search_key').value || null,
-      tribunals,
-      max_results: 100,
-      precatorio_only: document.getElementById('precatorio_only').checked,
-      include_raw: document.getElementById('include_raw').checked,
-      extra_params: readExtraParams()
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
+  function onlyDigits(v) { return String(v || '').replace(/\D+/g, ''); }
+
+  function maskForDisplay(value) {
+    const digits = onlyDigits(value);
+    if (digits.length === 11) return digits.slice(0, 3) + '.***.***-' + digits.slice(-2);
+    if (digits.length === 14) return digits.slice(0, 2) + '.***.***/****-' + digits.slice(-2);
+    if (digits.length > 6) return digits.slice(0, 3) + '***' + digits.slice(-3);
+    const v = String(value || '');
+    return v ? v.slice(0, 3) + '***' : '(vazio)';
+  }
+
+  function formatCnj(raw) {
+    const d = onlyDigits(raw);
+    if (d.length !== 20) return raw || '—';
+    return d.slice(0, 7) + '-' + d.slice(7, 9) + '.' + d.slice(9, 13) + '.' + d.slice(13, 14) + '.' + d.slice(14, 16) + '.' + d.slice(16, 20);
+  }
+
+  const FLAG_LABELS = {
+    classe_precatorio_ou_rpv: 'Classe é Precatório/RPV',
+    assunto_precatorio_ou_rpv: 'Assunto de Precatório/RPV',
+    movimento_precatorio_ou_rpv: 'Movimento de Precatório/RPV',
+    requisicao_enviada_ao_tribunal: 'Requisição enviada ao tribunal',
+    requisicao_preparada_para_envio: 'Requisição preparada para envio',
+    consta_movimento_pago: 'Consta movimento de pagamento',
+    consta_movimento_cancelado: 'Consta movimento cancelado',
+    consta_suspensao_sobrestamento: 'Consta suspensão/sobrestamento',
+    texto_menciona_precatorio: 'Texto menciona precatório',
+    texto_menciona_rpv: 'Texto menciona RPV',
+  };
+  function friendlyFlag(f) { return FLAG_LABELS[f] || f; }
+
+  function buildHeaders(withJson) {
+    const h = {};
+    if (withJson) h['Content-Type'] = 'application/json';
+    const t = token();
+    if (t) h['X-Internal-Token'] = t;
+    return h;
+  }
+
+  function readExtraParams() {
+    const params = {};
+
+    const uf = el('uf').value.trim();
+    if (uf) params.uf = uf;
+
+    const ano = el('anoOrcamento').value.trim();
+    if (ano) params.ano_orcamento = /^\d+$/.test(ano) ? Number(ano) : ano;
+
+    const entidade = el('entidadeDevedora').value.trim();
+    if (entidade) params.entidade_devedora = entidade;
+
+    const mae = el('nomeMae').value.trim();
+    if (mae) params.nome_mae = mae;
+
+    const nascimento = el('dataNascimento').value.trim();
+    if (nascimento) params.data_nascimento = nascimento;
+
+    const advancedRaw = el('extraParamsAdvanced').value.trim();
+    if (advancedRaw) {
+      let advanced;
+      try { advanced = JSON.parse(advancedRaw); }
+      catch (e) {
+        throw new Error(
+          'Parâmetros avançados precisa ser JSON, não texto solto. Você digitou "' + advancedRaw + '". '
+          + 'Use chaves e aspas, por exemplo: {"campo":"valor"}  —  detalhe técnico: ' + e.message
+        );
+      }
+      Object.assign(params, advanced);
+    }
+
+    return params;
+  }
+
+  function readTribunals() {
+    const t = el('tribunalFiltro').value.trim();
+    return t ? [t] : [];
+  }
+
+  function setLoading(label) {
+    resultsArea.innerHTML = '<div class="loading"><span class="spinner"></span>' + escapeHtml(label) + '</div>';
+  }
+
+  function setError(message) {
+    resultsArea.innerHTML = '<div class="error-box">' + escapeHtml(message) + '</div>';
+  }
+
+  async function apiFetch(path, options) {
+    const url = backendUrl() + path;
+    let res;
+    try {
+      res = await fetch(url, options);
+    } catch (e) {
+      throw new Error('Não consegui conectar em ' + url + '. Confira a URL do backend, o CORS (FRONTEND_ALLOWED_ORIGINS) e se o servidor está no ar.');
+    }
+    if (res.status === 401) {
+      throw new Error('HTTP 401: token interno ausente ou inválido. Confira o campo "Token interno" acima.');
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error('Erro HTTP ' + res.status + ': ' + (text || res.statusText));
+    }
+    return res.json();
+  }
+
+  // ---------- Dados de demonstração ----------
+
+  function demoSearchResponse(provider, searchType, searchKey, tribunals, extraParams) {
+    const type = searchType === 'auto' ? 'cnj' : searchType;
+    const tribunal = (tribunals && tribunals[0]) || 'TRF1';
+    const isOfficial = provider === 'cjf_trf_precatorios' || ['precatorio', 'requisitorio', 'rpv'].includes(type);
+    return isOfficial
+      ? demoOfficialResponse(type, searchKey, tribunal, extraParams)
+      : demoIndicioResponse(provider, type, searchKey, tribunal);
+  }
+
+  // Gera variação determinística a partir do texto digitado — mesmo valor
+  // digitado sempre dá o mesmo exemplo (previsível), mas valores diferentes
+  // dão exemplos visivelmente diferentes. Resolve a queixa real de "sempre
+  // mostra o mesmo resultado" no modo demonstração.
+  function seedFromText(text) {
+    let h = 0;
+    const s = String(text || 'exemplo');
+    for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
+    return h;
+  }
+  function seededInt(seed, min, max) { return min + (seed % (max - min + 1)); }
+
+  function demoNumeroProcesso(searchKey) {
+    const digits = onlyDigits(searchKey);
+    if (digits.length === 20) return digits; // já é um CNJ de verdade digitado — ecoa exatamente
+    const seed = seedFromText(searchKey);
+    // Monta um número no formato CNJ, mas visivelmente fictício (dígitos derivados do que foi digitado).
+    const base = String(seed).padStart(7, '0').slice(0, 7);
+    const ano = 2020 + seededInt(seed, 0, 6);
+    return base + '00' + ano + '401' + String(seededInt(seed, 3000, 3099)).padStart(4, '0');
+  }
+
+  function demoIndicioResponse(provider, type, searchKey, tribunal) {
+    const providerUsed = (provider && provider !== 'auto') ? provider : ((type === 'cnj' || type === 'numero_processo') ? 'datajud' : 'judit');
+    const seed = seedFromText(searchKey);
+    const numeroProcesso = demoNumeroProcesso(searchKey);
+    return {
+      status: 'completed',
+      provider_used: providerUsed,
+      search_type: type,
+      search_key_masked: maskForDisplay(searchKey || '00012345620244013400'),
+      total: 1,
+      _demo: true,
+      results: [{
+        _demo: true,
+        provider: providerUsed,
+        tribunal: tribunal,
+        numero_processo: numeroProcesso,
+        classe: seededInt(seed, 0, 1) === 0 ? 'Precatório' : 'Cumprimento de sentença contra a Fazenda Pública',
+        assunto: 'Requisição de pequeno valor; Parte incontroversa (exemplo gerado a partir do que você digitou)',
+        orgao_julgador: seededInt(seed, 1, 6) + 'ª Vara Federal Cível da SJDF',
+        data_ajuizamento: (2022 + seededInt(seed, 0, 3)) + '-0' + (1 + seededInt(seed, 0, 8)) + '-1' + seededInt(seed, 0, 9),
+        ultima_atualizacao: '2026-05-20',
+        precatorio_score: seededInt(seed, 40, 98),
+        precatorio_flags: ['classe_precatorio_ou_rpv', 'movimento_precatorio_ou_rpv', 'requisicao_enviada_ao_tribunal', 'texto_menciona_precatorio'],
+      }],
+      warnings: [
+        'Demonstração: indício processual via ' + providerUsed + '. Preencha a URL do backend para consultar dados reais.',
+        'Este exemplo varia conforme o que você digita (número de processo, valores, score), mas todos os campos continuam sendo fictícios.',
+      ],
     };
-    const res = await fetch('/api/search', {
-      method: 'POST',
-      headers: buildHeaders({'Content-Type': 'application/json'}),
-      body: JSON.stringify(body)
-    });
-    await handleResponse(res);
-  } catch (err) {
-    output.textContent = String(err);
   }
-});
 
-capabilitiesBtn.addEventListener('click', async () => {
-  output.textContent = 'Carregando capacidades...';
-  try {
-    const res = await fetch('/api/capabilities', { headers: buildHeaders() });
-    await handleResponse(res);
-  } catch (err) {
-    output.textContent = String(err);
+  function demoOfficialResponse(type, searchKey, tribunal, extraParams) {
+    const ano = (extraParams && extraParams.ano_orcamento) || 2027;
+    const entidade = (extraParams && extraParams.entidade_devedora) || 'União (INSS)';
+    const seed = seedFromText(searchKey);
+    const numeroProcesso = demoNumeroProcesso(searchKey);
+    const digits = onlyDigits(searchKey);
+    const credorDocumento = (digits.length === 11 || digits.length === 14) ? maskForDisplay(digits) : maskForDisplay('12345678900');
+    // Se o que foi digitado parece um nome (tem letra, não é só número/CNJ),
+    // usa o próprio nome digitado no exemplo — evita o estranhamento de digitar
+    // "Paulo Henrique" e ver "Fulano de Tal" sem nenhuma relação com o que foi buscado.
+    const pareceNome = /[a-zA-ZÀ-ÿ]/.test(searchKey || '') && digits.length < 8;
+    const credorNome = pareceNome
+      ? (searchKey.trim().replace(/\b\w/g, (c) => c.toUpperCase()) + ' (exemplo — não é um resultado real)')
+      : 'Fulano de Tal da Silva (exemplo — não é um resultado real)';
+    return {
+      status: 'completed',
+      provider_used: 'cjf_trf_precatorios',
+      search_type: type,
+      search_key_masked: maskForDisplay(searchKey || '00012345620244013400'),
+      total: 1,
+      _demo: true,
+      results: [{
+        _demo: true,
+        provider: 'cjf_trf_precatorios',
+        tribunal: tribunal,
+        numero_processo: numeroProcesso,
+        credor_nome: credorNome,
+        credor_documento: credorDocumento,
+        ente_devedor: entidade + ' (exemplo)',
+        numero_requisitorio: 'EXEMPLO-OF-' + ano + '/' + String(seededInt(seed, 1000, 9999)).padStart(6, '0'),
+        numero_precatorio: 'EXEMPLO-PRC-' + ano + '/' + String(seededInt(seed, 1000, 9999)).padStart(7, '0'),
+        tipo_requisicao: type === 'rpv' ? 'rpv' : 'precatorio',
+        natureza: seededInt(seed, 0, 1) === 0 ? 'alimentar' : 'comum',
+        valor_requisitado: seededInt(seed, 8000, 950000) + (seed % 100) / 100,
+        ano_orcamento: ano,
+        data_expedicao: '2024-03-18',
+        data_envio_tribunal: '2024-04-01',
+        status_requisitorio: ['incluido_orcamento', 'enviado', 'autuado', 'pago'][seededInt(seed, 0, 3)],
+        posicao_fila: seededInt(seed, 50, 4800),
+        fonte_url: 'https://processual.trf1.jus.br/consultaProcessual/',
+        classe: 'Precatório',
+        assunto: 'Requisição de pequeno valor; Parte incontroversa (exemplo gerado a partir do que você digitou)',
+        orgao_julgador: seededInt(seed, 1, 6) + 'ª Vara Federal Cível da SJDF',
+        data_ajuizamento: '2024-03-11',
+        ultima_atualizacao: '2026-05-20',
+        precatorio_score: seededInt(seed, 40, 98),
+        precatorio_flags: ['classe_precatorio_ou_rpv', 'movimento_precatorio_ou_rpv', 'requisicao_enviada_ao_tribunal', 'texto_menciona_precatorio'],
+      }],
+      warnings: [
+        'Demonstração com o formato completo que a consulta oficial de precatório deve ter — todos os valores abaixo são inventados, só para mostrar o layout.',
+        'O conector real (cjf_trf_precatorios) hoje só confirma o processo por CNJ no TRF1 — campos de requisitório/ente devedor/status/valor NÃO são preenchidos de verdade ainda. Isso é o próximo passo combinado no backend.',
+      ],
+    };
   }
-});
+
+  function demoCapabilities() {
+    return {
+      message: 'Cada provedor/API declara os identificadores aceitos e campos extras que pode exigir. (dados de demonstração)',
+      providers: {
+        datajud: {
+          supported_search_types: ['cnj', 'numero_processo', 'precatorio_scan'],
+          capabilities: {
+            cnj: { description: 'Consulta processo por número CNJ na API Pública do DataJud.' },
+            numero_processo: { description: 'Consulta por número de processo quando estiver no padrão CNJ.' },
+            precatorio_scan: { description: 'Varredura por indícios de precatório/RPV.' },
+          },
+        },
+        judit: {
+          supported_search_types: ['cpf', 'cnpj', 'oab', 'cnj', 'name'],
+          capabilities: {
+            cpf: { description: 'Busca processual por CPF via Judit.' },
+            cnpj: { description: 'Busca processual por CNPJ via Judit.' },
+            oab: { description: 'Busca por OAB via Judit.' },
+            cnj: { description: 'Busca por número CNJ via Judit.' },
+            name: { description: 'Busca por nome da parte via Judit.' },
+          },
+        },
+        tribunal_precatorios: {
+          supported_search_types: ['requisitorio_number', 'precatorio_number', 'rpv_number', 'cpf'],
+          capabilities: {
+            requisitorio_number: { description: 'Consulta por número de requisitório (aguardando conector real do tribunal).' },
+          },
+        },
+        cjf_trf_precatorios: {
+          supported_search_types: ['cnj', 'numero_processo', 'cpf', 'cnpj', 'oab', 'name', 'requisitorio_number', 'precatorio_number', 'rpv_number'],
+          capabilities: {
+            cnj: { description: 'Consulta oficial por CNJ. Implementado para TRF1 (verificado ao vivo).' },
+            numero_processo: { description: 'Mesma consulta do CNJ, para número já no padrão CNJ. Implementado para TRF1.' },
+            cpf: { description: 'TRF1 tem formulário público; ainda não implementado aqui.' },
+            cnpj: { description: 'TRF1 tem formulário público; ainda não implementado aqui.' },
+            oab: { description: 'TRF1 tem formulário público; ainda não implementado aqui.' },
+            name: { description: 'TRF1 tem formulário público; ainda não implementado aqui.' },
+            requisitorio_number: { description: 'Sem endpoint dedicado confirmado em nenhuma fonte mapeada. Busque por CNJ/processo.' },
+            precatorio_number: { description: 'Sem endpoint dedicado confirmado em nenhuma fonte mapeada. Busque por CNJ/processo.' },
+            rpv_number: { description: 'Sem endpoint dedicado confirmado em nenhuma fonte mapeada. Busque por CNJ/processo.' },
+          },
+        },
+      },
+    };
+  }
+
+  function demoOfficialSources() {
+    // Espelha exatamente o registry real do backend (66 fontes) — mesmos
+    // status, não é um exemplo genérico. Ver docs/RAIO_X_PRECATÓRIOS_ARQUITETURA.md.
+    const federal = [
+      ['cjf_precatorios', 'CJF - Precatórios e RPVs', 'mapped_public_dashboard'],
+      ['trf1_precatorios', 'TRF1 - Consulta Processual/RPV/Precatórios', 'implemented_partial'],
+      ['trf2_precatorios', 'TRF2 - Precatórios/RPVs (segredo de justiça)', 'requires_credentials'],
+      ['trf3_requisicoes_pagamento', 'TRF3 - Requisições de Pagamento', 'public_form_to_implement'],
+      ['trf4_precatorios', 'TRF4 - Consultar Precatórios e RPVs', 'public_form_to_implement'],
+      ['trf5_precatorios', 'TRF5 - Portal de Precatórios/RPVs', 'public_form_to_implement'],
+      ['trf6_precatorios', 'TRF6 - Roteador PJe/eproc', 'router_to_implement'],
+    ];
+    const nacional = [
+      ['sispreq_pdpj', 'SisPreq/PDPJ-Br', 'requires_institutional_credentials'],
+      ['mpo_siop_precatorios_dados_abertos', 'MPO/SIOP - Dados Abertos', 'public_open_data_to_implement'],
+      ['loa_camara_uniao', 'LOA Câmara/União', 'mapped_open_budget_files'],
+    ];
+    const superior = [
+      ['stf_precatorios', 'STF', 'source_mapping_required'],
+      ['stj_precatorios', 'STJ', 'source_mapping_required'],
+      ['tst_precatorios', 'TST', 'source_mapping_required'],
+      ['stm_precatorios', 'STM', 'source_mapping_required'],
+    ];
+    const estadualDestaque = [
+      ['tjdft_sapre', 'TJDFT/SAPRE', 'source_mapping_required'],
+      ['tjsp_precatorios', 'TJSP - Listas de precatórios', 'public_lists_to_implement'],
+    ];
+    const tjSiglas = ['TJAC','TJAL','TJAM','TJAP','TJBA','TJCE','TJES','TJGO','TJMA','TJMG','TJMS','TJMT','TJPA','TJPB','TJPE','TJPI','TJPR','TJRJ','TJRN','TJRO','TJRR','TJRS','TJSC','TJSE','TJTO'];
+    const estadual = estadualDestaque.concat(tjSiglas.map((s) => [s.toLowerCase(), s + ' (não pesquisado)', 'not_researched']));
+    const trtNums = Array.from({length: 24}, (_, i) => i + 1);
+    const trabalhista = trtNums.map((n) => ['trt' + n, 'TRT' + n + ' (não pesquisado)', 'not_researched'])
+      .concat([['csjt_precatorios', 'CSJT (não pesquisado)', 'not_researched']]);
+
+    const groups = {
+      'Justiça Federal (7)': federal,
+      'Camadas nacionais/orçamentárias (3)': nacional,
+      'Tribunais superiores (4)': superior,
+      'Justiça estadual (27)': estadual,
+      'Justiça do Trabalho (25)': trabalhista,
+    };
+
+    const byStatus = {};
+    Object.values(groups).flat().forEach(([, , status]) => { byStatus[status] = (byStatus[status] || 0) + 1; });
+
+    return {
+      message: 'Registro de fontes oficiais/institucionais para precatórios, RPVs, LOA, orçamento, fila e pagamento. (dados de demonstração — espelham o registry real)',
+      summary: { total_sources: 66, by_integration_status: byStatus },
+      groups,
+    };
+  }
+
+  function demoHistory() {
+    const now = Date.now();
+    const iso = (msAgo) => new Date(now - msAgo).toISOString();
+    return [
+      { id: 4, created_at: iso(20 * 60 * 1000), provider: 'datajud', search_type: 'cnj', search_key_masked: '000***400', tribunals: '["TRF1"]', status: 'completed', notes: null },
+      { id: 3, created_at: iso(3 * 3600 * 1000), provider: 'judit', search_type: 'cpf', search_key_masked: '123.***.***-00', tribunals: '[]', status: 'completed', notes: 'judit: Judit não está habilitada. Configure JUDIT_ENABLED=true e JUDIT_API_KEY.' },
+      { id: 2, created_at: iso(26 * 3600 * 1000), provider: 'datajud', search_type: 'precatorio_scan', tribunals: '["TRF1","TRF2"]', search_key_masked: 'precatorio_scan', status: 'completed', notes: null },
+      { id: 1, created_at: iso(72 * 3600 * 1000), provider: 'judit', search_type: 'name', search_key_masked: 'Ful***Tal', tribunals: '[]', status: 'completed', notes: null },
+    ];
+  }
+
+  // ---------- Render ----------
+
+  function renderSearchResponse(data) {
+    const statusClass = data.status === 'completed' ? 'status-completed' : '';
+    let html = '<section class="card">';
+    html += '<div class="status-strip">';
+    html += '<span class="chip ' + statusClass + '">Status: ' + escapeHtml(data.status || '—') + '</span>';
+    html += '<span class="chip">Provedor: ' + escapeHtml(data.provider_used || '—') + '</span>';
+    html += '<span class="chip">Tipo: ' + escapeHtml(data.search_type || '—') + '</span>';
+    html += '<span class="chip">Chave: ' + escapeHtml(data.search_key_masked || '—') + '</span>';
+    html += '<span class="chip">Total: ' + (data.total != null ? data.total : (data.results || []).length) + '</span>';
+    html += '</div>';
+
+    if (data.warnings && data.warnings.length) {
+      html += '<div class="warnings">';
+      data.warnings.forEach((w) => { html += '<div class="warning-item">' + escapeHtml(w) + '</div>'; });
+      html += '</div>';
+    }
+
+    const results = data.results || [];
+    if (!results.length) {
+      html += '<div class="empty-state"><span class="glyph">—</span>Nenhum processo encontrado para este identificador.</div>';
+    } else {
+      results.forEach((r) => { html += renderResultCard(r); });
+    }
+
+    html += '</section>';
+    resultsArea.innerHTML = html;
+  }
+
+  const STATUS_LABELS = {
+    expedido: 'Expedido',
+    enviado: 'Enviado ao tribunal',
+    autuado: 'Autuado',
+    incluido_orcamento: 'Incluído no orçamento',
+    pago: 'Pago',
+    cancelado: 'Cancelado',
+    suspenso: 'Suspenso',
+  };
+  function statusLabel(s) { return STATUS_LABELS[s] || s; }
+  function statusChipClass(s) {
+    if (s === 'pago') return 'status-chip success';
+    if (s === 'cancelado' || s === 'suspenso') return 'status-chip danger';
+    if (s === 'incluido_orcamento') return 'status-chip highlight';
+    return 'status-chip';
+  }
+  function formatCurrency(value) {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    if (Number.isNaN(n)) return String(value);
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+  function fieldRow(label, value) {
+    return '<div class="official-field"><span class="official-field-label">' + escapeHtml(label) + '</span><span class="official-field-value">' + escapeHtml(value) + '</span></div>';
+  }
+
+  function renderResultCard(r) {
+    const score = r.precatorio_score || 0;
+    const hasSignal = score > 0;
+    const numero = r.numero_processo ? formatCnj(r.numero_processo) : '(número não informado)';
+    const isOfficial = !!(r.numero_requisitorio || r.numero_precatorio || r.status_requisitorio || r.ente_devedor);
+
+    let html = '<div class="result-card"><div class="result-top">';
+    html += '<div><div class="numero">' + escapeHtml(numero) + '</div>';
+    html += '<div class="tribunal">' + escapeHtml(r.tribunal || r.provider || '—') + '</div></div>';
+    html += '<div class="seal' + (hasSignal ? '' : ' none') + '"><span class="num">' + (hasSignal ? score : '—') + '</span><span class="lbl">' + (hasSignal ? 'indício' : 'sem indício') + '</span></div>';
+    html += '</div>';
+
+    if (isOfficial) {
+      html += '<div class="official-block"><div class="section-label">Consulta oficial de precatório/RPV</div>';
+      if (r.status_requisitorio) {
+        html += '<div><span class="' + statusChipClass(r.status_requisitorio) + '">' + escapeHtml(statusLabel(r.status_requisitorio)) + '</span></div>';
+      }
+      html += '<div class="official-grid">';
+      if (r.numero_requisitorio) html += fieldRow('Requisitório', r.numero_requisitorio);
+      if (r.numero_precatorio) html += fieldRow('Precatório', r.numero_precatorio);
+      if (r.tipo_requisicao) html += fieldRow('Tipo', r.tipo_requisicao === 'rpv' ? 'RPV' : 'Precatório');
+      if (r.natureza) html += fieldRow('Natureza', r.natureza === 'alimentar' ? 'Alimentar' : 'Comum');
+      if (r.ano_orcamento) html += fieldRow('Ano-orçamento', String(r.ano_orcamento));
+      if (r.valor_requisitado != null) html += fieldRow('Valor requisitado', formatCurrency(r.valor_requisitado));
+      if (r.posicao_fila) html += fieldRow('Posição na fila', String(r.posicao_fila));
+      if (r.data_expedicao) html += fieldRow('Expedição', r.data_expedicao);
+      if (r.data_envio_tribunal) html += fieldRow('Envio ao tribunal', r.data_envio_tribunal);
+      html += '</div>';
+
+      if (r.credor_nome || r.ente_devedor) {
+        html += '<div class="parties-row">';
+        if (r.credor_nome) html += '<div><span class="party-label">Credor</span>' + escapeHtml(r.credor_nome) + (r.credor_documento ? ' · ' + escapeHtml(r.credor_documento) : '') + '</div>';
+        if (r.ente_devedor) html += '<div><span class="party-label">Ente devedor</span>' + escapeHtml(r.ente_devedor) + '</div>';
+        html += '</div>';
+      }
+      if (r.fonte_url) {
+        html += '<div class="fonte-row">Fonte consultada: <a href="' + escapeHtml(r.fonte_url) + '" target="_blank" rel="noopener">' + escapeHtml(r.fonte_url) + '</a></div>';
+      }
+      html += '</div>';
+    }
+
+    if (r.classe || r.assunto || r.orgao_julgador || r.data_ajuizamento || r.ultima_atualizacao) {
+      html += '<div class="result-meta"><div class="section-label">Indício processual' + (r.provider ? ' via ' + escapeHtml(r.provider) : '') + '</div>';
+      if (r.classe) html += '<div><b>Classe:</b> ' + escapeHtml(r.classe) + '</div>';
+      if (r.assunto) html += '<div><b>Assunto:</b> ' + escapeHtml(r.assunto) + '</div>';
+      if (r.orgao_julgador) html += '<div><b>Órgão julgador:</b> ' + escapeHtml(r.orgao_julgador) + '</div>';
+      if (r.data_ajuizamento) html += '<div><b>Ajuizamento:</b> ' + escapeHtml(r.data_ajuizamento) + '</div>';
+      if (r.ultima_atualizacao) html += '<div><b>Última atualização:</b> ' + escapeHtml(r.ultima_atualizacao) + '</div>';
+      html += '</div>';
+    }
+
+    if (r.precatorio_flags && r.precatorio_flags.length) {
+      html += '<div class="flags">';
+      r.precatorio_flags.forEach((f) => { html += '<span class="flag-tag">' + escapeHtml(friendlyFlag(f)) + '</span>'; });
+      html += '</div>';
+    }
+
+    if (r.texto_bruto) {
+      const trecho = r.texto_bruto.length > 800 ? r.texto_bruto.slice(0, 800) + '…' : r.texto_bruto;
+      html += '<details class="raw-text"><summary>Texto da fonte oficial (extração ainda não estruturada)</summary><p>' + escapeHtml(trecho) + '</p></details>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function renderCapabilities(data) {
+    let html = '<section class="card"><h2>Capacidades dos provedores</h2>';
+    if (data.message) html += '<p style="font-size:13px;color:var(--ink-soft);margin-top:-6px;">' + escapeHtml(data.message) + '</p>';
+    const providers = data.providers || {};
+    Object.keys(providers).forEach((name) => {
+      const p = providers[name];
+      html += '<div class="cap-provider"><h3>' + escapeHtml(name) + '</h3><div class="cap-types">';
+      (p.supported_search_types || []).forEach((t) => { html += '<span class="flag-tag">' + escapeHtml(t) + '</span>'; });
+      html += '</div></div>';
+    });
+    html += '</section>';
+    resultsArea.innerHTML = html;
+  }
+
+  function renderHistory(rows) {
+    let html = '<section class="card"><h2>Histórico de consultas</h2>';
+    if (!rows || !rows.length) {
+      html += '<div class="empty-state">Nenhuma consulta registrada ainda.</div>';
+    } else {
+      rows.forEach((row) => {
+        const when = row.created_at ? new Date(row.created_at).toLocaleString('pt-BR') : '—';
+        html += '<div class="hist-row"><div class="l">' + escapeHtml(when) + '<br>' + escapeHtml(row.provider) + ' · ' + escapeHtml(row.search_type) + '</div>';
+        html += '<div class="r">' + escapeHtml(row.search_key_masked || '') + '<br>' + escapeHtml(row.status || '') + '</div></div>';
+      });
+    }
+    html += '</section>';
+    resultsArea.innerHTML = html;
+  }
+
+  const SOURCE_STATUS_META = {
+    implemented_partial: { label: 'Implementado (parcial)', cls: 'success' },
+    mapped_public_dashboard: { label: 'Painel público mapeado', cls: '' },
+    mapped_open_budget_files: { label: 'Arquivos orçamentários mapeados', cls: '' },
+    public_open_data_to_implement: { label: 'Dados abertos — a implementar', cls: '' },
+    public_form_to_implement: { label: 'Formulário público — a implementar', cls: '' },
+    public_portal_to_implement: { label: 'Portal público — a implementar', cls: '' },
+    public_lists_to_implement: { label: 'Listas públicas — a implementar', cls: '' },
+    router_to_implement: { label: 'Roteador — a implementar', cls: '' },
+    requires_institutional_credentials: { label: 'Requer credencial institucional', cls: 'danger' },
+    requires_credentials: { label: 'Requer login/certificado', cls: 'danger' },
+    source_mapping_required: { label: 'Precisa mapear fonte', cls: 'highlight' },
+    not_researched: { label: 'Não pesquisado ainda', cls: 'muted' },
+  };
+  function sourceStatusMeta(s) { return SOURCE_STATUS_META[s] || { label: s, cls: '' }; }
+
+  function renderOfficialSourcesHtml(data) {
+    let html = '<section class="card"><h2>Precatório oficial (fontes por tribunal)</h2>';
+    if (data.message) html += '<p style="font-size:13px;color:var(--ink-soft);margin-top:-6px;">' + escapeHtml(data.message) + '</p>';
+
+    const summary = data.summary || {};
+    html += '<div class="summary-chips">';
+    html += '<span class="chip">Total: ' + (summary.total_sources ?? '—') + '</span>';
+    Object.entries(summary.by_integration_status || {}).forEach(([status, count]) => {
+      const meta = sourceStatusMeta(status);
+      html += '<span class="status-chip ' + meta.cls + '">' + escapeHtml(meta.label) + ': ' + count + '</span>';
+    });
+    html += '</div>';
+
+    // Aceita tanto o formato "groups" (demonstração) quanto "sources" flat (backend real).
+    let groups = data.groups;
+    if (!groups && data.sources) {
+      groups = {};
+      Object.values(data.sources).forEach((src) => {
+        const scopeLabel = src.scope || 'outro';
+        groups[scopeLabel] = groups[scopeLabel] || [];
+        groups[scopeLabel].push([src.key, src.name, src.integration_status]);
+      });
+    }
+    groups = groups || {};
+
+    Object.entries(groups).forEach(([groupName, items]) => {
+      html += '<details class="source-group"><summary>' + escapeHtml(groupName) + ' ▾</summary>';
+      items.forEach(([key, name, status]) => {
+        const meta = sourceStatusMeta(status);
+        html += '<div class="source-row"><span class="name">' + escapeHtml(name) + '</span><span class="status-chip ' + meta.cls + '">' + escapeHtml(meta.label) + '</span></div>';
+      });
+      html += '</details>';
+    });
+
+    html += '</section>';
+    return html;
+  }
+
+  // ---------- Ações ----------
+
+  async function handleSearch() {
+    let extraParams;
+    try { extraParams = readExtraParams(); }
+    catch (e) { setError(e.message); return; }
+
+    const provider = el('provider').value;
+    const searchType = el('searchType').value;
+    const searchKey = el('searchKey').value.trim();
+    const tribunals = readTribunals();
+
+    if (isDemo()) {
+      setLoading('Consultando (demonstração)…');
+      setTimeout(() => renderSearchResponse(demoSearchResponse(provider, searchType, searchKey, tribunals, extraParams)), 450);
+      return;
+    }
+
+    setLoading('Consultando ' + backendUrl() + '…');
+    try {
+      const body = { provider, search_type: searchType, search_key: searchKey || null, tribunals, extra_params: extraParams, max_results: 50 };
+      const data = await apiFetch('/api/search', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
+      renderSearchResponse(data);
+    } catch (e) { setError(e.message); }
+  }
+
+  async function handleCapabilities() {
+    if (isDemo()) {
+      setLoading('Carregando capacidades (demonstração)…');
+      setTimeout(() => renderCapabilities(demoCapabilities()), 350);
+      return;
+    }
+    setLoading('Carregando capacidades de ' + backendUrl() + '…');
+    try {
+      const data = await apiFetch('/api/capabilities', { method: 'GET', headers: buildHeaders(false) });
+      renderCapabilities(data);
+    } catch (e) { setError(e.message); }
+  }
+
+  async function handleHistory() {
+    if (isDemo()) {
+      setLoading('Carregando histórico (demonstração)…');
+      setTimeout(() => renderHistory(demoHistory()), 350);
+      return;
+    }
+    setLoading('Carregando histórico de ' + backendUrl() + '…');
+    try {
+      const data = await apiFetch('/api/history', { method: 'GET', headers: buildHeaders(false) });
+      renderHistory(data);
+    } catch (e) { setError(e.message); }
+  }
+
+  function handleClear() {
+    el('searchKey').value = '';
+    el('uf').value = '';
+    el('tribunalFiltro').value = '';
+    el('anoOrcamento').value = '';
+    el('entidadeDevedora').value = '';
+    el('nomeMae').value = '';
+    el('dataNascimento').value = '';
+    el('extraParamsAdvanced').value = '';
+    el('provider').value = 'auto';
+    el('searchType').value = 'auto';
+    resultsArea.innerHTML = '<div class="empty-state"><span class="glyph">⚖</span>Preencha os campos acima e toque em Buscar.<br>Sem URL de backend, o resultado é uma demonstração.</div>';
+  }
+
+  el('btnSearch').addEventListener('click', handleSearch);
+  el('btnCapabilities').addEventListener('click', handleCapabilities);
+  el('btnHistory').addEventListener('click', handleHistory);
+  el('btnClear').addEventListener('click', handleClear);
+
+  // ---------- STJ — upload e busca (sem dado sintético) ----------
+
+  function stjNotReadyMessage() {
+    return 'Preencha a URL do backend acima para enviar ou buscar arquivos do STJ — isso exige um servidor real, não dá para demonstrar com dado fictício.';
+  }
+
+  function formatCurrencyStj(value) {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    if (Number.isNaN(n)) return String(value);
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  async function handleStjUpload() {
+    const statusEl = el('stjUploadStatus');
+    if (isDemo()) {
+      statusEl.innerHTML = '<div class="warning-item">' + escapeHtml(stjNotReadyMessage()) + '</div>';
+      return;
+    }
+    const fileInput = el('stjFile');
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) {
+      statusEl.innerHTML = '<div class="warning-item">Escolha um arquivo .xlsx/.xlsm/.xls antes de enviar.</div>';
+      return;
+    }
+    statusEl.innerHTML = '<div class="loading"><span class="spinner"></span>Enviando ' + escapeHtml(file.name) + '…</div>';
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      const data = await apiFetch('/api/stj-precatorios/upload-xlsx', {
+        method: 'POST',
+        headers: buildHeaders(false), // sem Content-Type: o navegador define o boundary do multipart sozinho
+        body: formData,
+      });
+      let html = '<div class="stj-upload-ok"><div class="title">Arquivo carregado</div>';
+      html += '<div><b>Arquivo:</b> ' + escapeHtml(data.arquivo_original) + '</div>';
+      html += '<div><b>Enviado em:</b> ' + escapeHtml(new Date(data.uploaded_at).toLocaleString('pt-BR')) + '</div>';
+      html += '<div><b>Total de registros lidos:</b> ' + (data.total_registros ?? 0) + '</div>';
+      (data.abas || []).forEach((aba) => {
+        html += '<div class="stj-sheet-row">Aba "' + escapeHtml(aba.aba) + '": ' + aba.registros_lidos + ' registro(s), campos detectados: '
+          + (aba.campos_detectados && aba.campos_detectados.length ? escapeHtml(aba.campos_detectados.join(', ')) : '(nenhum — cabeçalho não reconhecido nesta aba)') + '</div>';
+      });
+      html += '</div>';
+      statusEl.innerHTML = html;
+    } catch (e) {
+      statusEl.innerHTML = '<div class="error-box">' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  function renderStjResult(data) {
+    const area = el('stjResultsArea');
+    if (data.status === 'not_loaded') {
+      area.innerHTML = '<div class="stj-not-loaded"><b>Arquivo oficial do STJ ainda não carregado.</b>Envie o XLSX acima antes de buscar.</div>';
+      return;
+    }
+    if (!data.results || !data.results.length) {
+      area.innerHTML = '<div class="stj-not-loaded"><b>Nenhum registro encontrado</b>para esse valor no(s) arquivo(s) carregado(s).</div>';
+      return;
+    }
+    let html = '';
+    data.results.forEach((r) => {
+      html += '<div class="stj-result-card">';
+      html += '<div class="stj-value">' + (formatCurrencyStj(r.valor) || '(valor não informado no arquivo)') + '</div>';
+      html += '<div class="result-meta" style="margin-top:8px;">';
+      if (r.sequencial) html += '<div><b>Sequencial:</b> ' + escapeHtml(r.sequencial) + '</div>';
+      if (r.classe) html += '<div><b>Classe:</b> ' + escapeHtml(r.classe) + '</div>';
+      if (r.numero_processo) html += '<div><b>Número do processo:</b> ' + escapeHtml(formatCnj(r.numero_processo)) + '</div>';
+      if (r.credor_nome) html += '<div><b>Credor:</b> ' + escapeHtml(r.credor_nome) + '</div>';
+      if (r.natureza) html += '<div><b>Natureza:</b> ' + escapeHtml(r.natureza) + '</div>';
+      if (r.prioridade) html += '<div><b>Prioridade:</b> ' + escapeHtml(r.prioridade) + '</div>';
+      if (r.previsao_pagamento) html += '<div><b>Previsão de pagamento:</b> ' + escapeHtml(r.previsao_pagamento) + '</div>';
+      if (r.ano_orcamento) html += '<div><b>Ano-orçamento:</b> ' + escapeHtml(String(r.ano_orcamento)) + '</div>';
+      if (r.entidade_devedora) html += '<div><b>Entidade devedora:</b> ' + escapeHtml(r.entidade_devedora) + '</div>';
+      html += '</div>';
+      html += '<div class="stj-provenance">';
+      html += '<div><b>Fonte:</b> ' + escapeHtml(r.fonte || 'STJ - XLSX oficial carregado manualmente') + '</div>';
+      html += '<div><b>Arquivo:</b> ' + escapeHtml(r.arquivo_original || '—') + '</div>';
+      html += '<div><b>Enviado em:</b> ' + (r.uploaded_at ? escapeHtml(new Date(r.uploaded_at).toLocaleString('pt-BR')) : '—') + '</div>';
+      html += '<div><b>Aba:</b> ' + escapeHtml(r.aba || '—') + ' · <b>Linha:</b> ' + escapeHtml(r.linha_arquivo != null ? String(r.linha_arquivo) : '—') + '</div>';
+      html += '<div><b>Consultado em:</b> ' + (r.consultado_em ? escapeHtml(new Date(r.consultado_em).toLocaleString('pt-BR')) : '—') + '</div>';
+      html += '</div></div>';
+    });
+    area.innerHTML = html;
+  }
+
+  async function handleStjSearch() {
+    if (isDemo()) {
+      el('stjResultsArea').innerHTML = '<div class="warning-item">' + escapeHtml(stjNotReadyMessage()) + '</div>';
+      return;
+    }
+    const searchType = el('stjSearchType').value;
+    const searchKey = el('stjSearchKey').value.trim();
+    if (!searchKey) {
+      el('stjResultsArea').innerHTML = '<div class="warning-item">Digite um valor para buscar (sequencial ou número do processo).</div>';
+      return;
+    }
+    const anoRaw = el('stjAnoOrcamento').value.trim();
+    const body = { search_type: searchType, search_key: searchKey };
+    if (anoRaw) body.ano_orcamento = /^\d+$/.test(anoRaw) ? Number(anoRaw) : anoRaw;
+
+    el('stjResultsArea').innerHTML = '<div class="loading"><span class="spinner"></span>Buscando no STJ…</div>';
+    try {
+      const data = await apiFetch('/api/stj-precatorios/search', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
+      renderStjResult(data);
+    } catch (e) {
+      el('stjResultsArea').innerHTML = '<div class="error-box">' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  el('btnStjUpload').addEventListener('click', handleStjUpload);
+  el('btnStjSearch').addEventListener('click', handleStjSearch);
+
+  // ================= Abas =================
+
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tabId));
+    document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.toggle('active', panel.id === 'tab-' + tabId));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  // ================= Diligência diária (hub do Modo Simples) =================
+
+  function demoDossier(searchType, searchKey) {
+    const officialDemo = demoOfficialResponse(searchType === 'auto' ? 'cnj' : searchType, searchKey, 'TRF1', {});
+    return {
+      status: 'completed',
+      search_type: searchType,
+      search_key_masked: maskForDisplay(searchKey || '00012345620244013400'),
+      _demo: true,
+      summary: { process_results: 1, official_precatorio_sources_considered: 8, missing_recommended_fields: ['tribunal/trf', 'ano_orcamento (quando a pergunta for LOA/orçamento)'] },
+      processual_datajud_private_apis: officialDemo,
+      official_precatorio_loa_budget_plan: {
+        layers: [
+          { layer: 'descoberta_processual', goal: 'Encontrar processos relacionados ao identificador informado.', sources: ['datajud', 'judit'] },
+          { layer: 'localizacao_requisitorio', goal: 'A partir do processo, localizar número do requisitório/precatório/RPV.', sources: ['trf1_precatorios', 'stj_precatorios'] },
+          { layer: 'loa_orcamento', goal: 'Confirmar exercício orçamentário, PLOA/LOA e órgão orçamentário.', sources: ['mpo_siop_precatorios_dados_abertos', 'loa_camara_uniao'] },
+          { layer: 'fila_pagamento_status', goal: 'Buscar situação, ordem cronológica, pagamento e banco quando disponível.', sources: ['trf1_precatorios'] },
+        ],
+        missing_recommended_fields: ['ano_orcamento (quando a pergunta for LOA/orçamento)'],
+      },
+      important_note: 'Indício processual não confirma inscrição em LOA. Confirmação exige fonte oficial de precatório/LOA no plano.',
+    };
+  }
+
+  function simpleValue() { return el('simpleSearchKey').value.trim(); }
+
+  function handleSimpleCertidoes() {
+    showSimpleCertPanel();
+  }
+  function handleSimplePrecatorio() {
+    const v = simpleValue();
+    setMode(false);
+    switchTab('precatorio');
+    if (v) { el('searchKey').value = v; }
+  }
+  function handleSimpleFontes() {
+    setMode(false);
+    switchTab('fontes');
+    handleFontesLoad();
+  }
+
+  el('btnSimpleCertidoes').addEventListener('click', handleSimpleCertidoes);
+  el('btnSimplePrecatorio').addEventListener('click', handleSimplePrecatorio);
+  el('btnSimpleFontes').addEventListener('click', handleSimpleFontes);
+
+  // ================= Certidões =================
+
+  const CERT_STATUS_META = {
+    implemented_configurable: { label: 'Configurável', cls: 'configuravel' },
+    implemented: { label: 'Pronto', cls: 'pronto' },
+    source_mapping_required: { label: 'Requer mapeamento', cls: 'mapeamento' },
+    not_researched: { label: 'Não pesquisado', cls: 'naopesquisado' },
+  };
+  function certStatusMeta(source) {
+    // Prioriza o status positivo (configurável/pronto) quando existir — é o
+    // sinal mais acionável. Só cai pros bloqueios genéricos se não houver isso.
+    if (CERT_STATUS_META[source.integration_status] && ['implemented_configurable', 'implemented'].includes(source.integration_status)) {
+      return CERT_STATUS_META[source.integration_status];
+    }
+    if (source.captcha_expected === true) return { label: 'Captcha', cls: 'captcha' };
+    if (source.requires_api_contract) return { label: 'Requer contrato', cls: 'contrato' };
+    if (source.requires_login || source.requires_certificate) return { label: 'Requer credencial', cls: 'credencial' };
+    return CERT_STATUS_META[source.integration_status] || { label: source.integration_status || '—', cls: 'mapeamento' };
+  }
+
+  let certSourcesCache = {};
+  let certSelectedSourceId = null;
+
+  function demoCertSources() {
+    return {
+      message: 'Fontes de certidões (dados de demonstração — espelham o registry real).',
+      sources: {
+        serpro_consulta_cnd: { source_id: 'serpro_consulta_cnd', name: 'Serpro Consulta CND (Receita + PGFN)', orgao: 'Serpro / RFB / PGFN', certificate_types: ['fiscal_cnd'], requires_api_contract: true, captcha_expected: false, integration_status: 'implemented_configurable', official_url: 'https://loja.serpro.gov.br/consultacnd' },
+        receita_pgfn_cnd_portal: { source_id: 'receita_pgfn_cnd_portal', name: 'Receita/PGFN - Portal Regularize', orgao: 'RFB / PGFN', certificate_types: ['fiscal_cnd'], integration_status: 'source_mapping_required', official_url: 'https://www.regularize.pgfn.gov.br/' },
+        cjf_certidao_unificada: { source_id: 'cjf_certidao_unificada', name: 'CJF - Certidão Unificada da Justiça Federal', orgao: 'CJF / TRF1-TRF6', certificate_types: ['civel', 'criminal', 'eleitoral'], integration_status: 'source_mapping_required', official_url: 'https://www.cjf.jus.br/cjf/certidao-negativa' },
+        tj_certidoes_base: { source_id: 'tj_certidoes_base', name: 'TJs estaduais (base genérica)', orgao: 'Tribunais de Justiça', certificate_types: ['civel', 'criminal'], integration_status: 'not_researched', official_url: 'https://www.cnj.jus.br/tribunais/' },
+        stf_certidoes: { source_id: 'stf_certidoes', name: 'STF - Certidões', orgao: 'STF', certificate_types: ['civel', 'criminal'], integration_status: 'not_researched', official_url: 'https://portal.stf.jus.br/' },
+        stj_certidoes: { source_id: 'stj_certidoes', name: 'STJ - Certidões', orgao: 'STJ', certificate_types: ['civel', 'criminal'], integration_status: 'not_researched', official_url: 'https://www.stj.jus.br/' },
+        tst_certidoes: { source_id: 'tst_certidoes', name: 'TST - Certidões (inclui CNDT)', orgao: 'TST', certificate_types: ['trabalhista_cndt'], integration_status: 'not_researched', official_url: 'https://www.tst.jus.br/certidao1' },
+        trt_certidoes_base: { source_id: 'trt_certidoes_base', name: 'TRTs (base genérica)', orgao: 'TRT1-24', certificate_types: ['civel', 'criminal', 'trabalhista'], integration_status: 'not_researched', official_url: 'https://www.csjt.jus.br/' },
+      },
+    };
+  }
+
+  function renderCertSources(data) {
+    certSourcesCache = data.sources || {};
+    let html = '';
+    if (data.message) html += '<p style="font-size:13px;color:var(--ink-soft);">' + escapeHtml(data.message) + '</p>';
+    Object.values(certSourcesCache).forEach((src) => {
+      const meta = certStatusMeta(src);
+      html += '<div class="cert-source-card" data-source-id="' + escapeHtml(src.source_id) + '">';
+      html += '<div><div class="name">' + escapeHtml(src.name) + '</div><div class="orgao">' + escapeHtml(src.orgao || '') + '</div></div>';
+      html += '<span class="cert-status-badge ' + meta.cls + '">' + escapeHtml(meta.label) + '</span>';
+      html += '</div>';
+    });
+    el('certSourcesList').innerHTML = html;
+    document.querySelectorAll('.cert-source-card').forEach((card) => {
+      card.addEventListener('click', () => selectCertSource(card.dataset.sourceId));
+    });
+  }
+
+  function selectCertSource(sourceId) {
+    certSelectedSourceId = sourceId;
+    document.querySelectorAll('.cert-source-card').forEach((c) => c.classList.toggle('selected', c.dataset.sourceId === sourceId));
+    const src = certSourcesCache[sourceId];
+    if (!src) return;
+    el('certRequestCard').style.display = '';
+    el('certSelectedSourceLabel').textContent = src.name + (src.orgao ? ' · ' + src.orgao : '');
+    const typeSelect = el('certType');
+    typeSelect.innerHTML = '';
+    (src.certificate_types || []).forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      typeSelect.appendChild(opt);
+    });
+    el('certResultArea').innerHTML = '';
+    window.scrollTo({ top: el('certRequestCard').offsetTop - 20, behavior: 'smooth' });
+  }
+
+  async function handleCertLoadSources() {
+    el('certSourcesList').innerHTML = '<div class="loading"><span class="spinner"></span>Carregando fontes de certidão…</div>';
+    if (isDemo()) {
+      setTimeout(() => renderCertSources(demoCertSources()), 350);
+      return;
+    }
+    try {
+      const data = await apiFetch('/api/certificates/sources', { method: 'GET', headers: buildHeaders(false) });
+      renderCertSources(data);
+    } catch (e) {
+      el('certSourcesList').innerHTML = '<div class="error-box">' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  function demoCertRequestResult(sourceId) {
+    // Mesma lógica honesta do backend real: sem credencial configurada, a
+    // resposta é sempre 'requer contrato'/'não integrado' — não é fictício,
+    // é literalmente o que o backend faz por padrão sem SERPRO_CND_* no .env.
+    if (sourceId === 'serpro_consulta_cnd') {
+      return { status: 'requer_api_contratada', message: 'API Serpro Consulta CND não configurada. É paga (Loja Serpro). Emissão manual gratuita em regularize.pgfn.gov.br enquanto isso.', fonte_url: 'https://loja.serpro.gov.br/consultacnd', consulted_at: new Date().toISOString() };
+    }
+    const src = certSourcesCache[sourceId] || {};
+    return { status: 'nao_integrado', message: (src.name || sourceId) + ': fonte mapeada, mas ainda não integrada. Emita manualmente na fonte oficial por enquanto.', fonte_url: src.official_url, consulted_at: new Date().toISOString() };
+  }
+
+  function renderCertResult(data) {
+    const cls = (data.status === 'negativa' || data.status === 'positiva') ? 'success-bg' : '';
+    let html = '<div class="cert-result-box"><div class="status-line">' + escapeHtml(data.status || '—') + '</div>';
+    html += '<div>' + escapeHtml(data.message || '') + '</div>';
+    if (data.fonte_url) html += '<div style="margin-top:8px;font-size:12px;"><a href="' + escapeHtml(data.fonte_url) + '" target="_blank" rel="noopener">' + escapeHtml(data.fonte_url) + '</a></div>';
+    if (data.consulted_at) html += '<div style="margin-top:4px;font-size:11.5px;color:var(--ink-soft);">Consultado em: ' + escapeHtml(new Date(data.consulted_at).toLocaleString('pt-BR')) + '</div>';
+    html += '</div>';
+    el('certResultArea').innerHTML = html;
+  }
+
+  async function handleCertRequest() {
+    if (!certSelectedSourceId) { return; }
+    if (isDemo()) {
+      el('certResultArea').innerHTML = '<div class="loading"><span class="spinner"></span>Solicitando (demonstração)…</div>';
+      setTimeout(() => renderCertResult(demoCertRequestResult(certSelectedSourceId)), 400);
+      return;
+    }
+    el('certResultArea').innerHTML = '<div class="loading"><span class="spinner"></span>Solicitando em ' + escapeHtml(backendUrl()) + '…</div>';
+    try {
+      const body = {
+        source_id: certSelectedSourceId,
+        certificate_type: el('certType').value,
+        document: el('certDocument').value.trim() || null,
+        name: el('certName').value.trim() || null,
+        extra: {},
+      };
+      const data = await apiFetch('/api/certificates/request', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
+      renderCertResult(data);
+    } catch (e) {
+      el('certResultArea').innerHTML = '<div class="error-box">' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  el('btnCertLoadSources').addEventListener('click', handleCertLoadSources);
+  el('btnCertRequest').addEventListener('click', handleCertRequest);
+
+  // ================= Fontes (consolidado /api/sources) =================
+
+  function demoMasterSources() {
+    return {
+      message: 'Mapa mestre de fontes/APIs. (dados de demonstração — espelham o registry real)',
+      summary: {
+        total_precatorio_oficial: 66, total_certidoes: 8, total_externo_comercial: 11,
+        prontos_para_uso_agora: [
+          { source: 'precatorio_oficial:mpo_siop_precatorios_dados_abertos', name: 'MPO/SIOP' },
+          { source: 'precatorio_oficial:trf1_precatorios', name: 'TRF1' },
+          { source: 'precatorio_oficial:stj_precatorios', name: 'STJ' },
+          { source: 'certidao:serpro_consulta_cnd', name: 'Serpro CND' },
+          { source: 'externo_comercial:datajud_cnj', name: 'DataJud/CNJ' },
+          { source: 'externo_comercial:judit_api', name: 'Judit' },
+        ],
+        dependem_de_credencial_ou_contrato: [
+          { source: 'precatorio_oficial:sispreq_pdpj', name: 'SisPreq/PDPJ' },
+          { source: 'precatorio_oficial:trf2_precatorios', name: 'TRF2' },
+          { source: 'externo_comercial:mni_pje', name: 'MNI/PJe' },
+        ],
+        exigem_automacao_de_navegador_ou_tem_captcha: [
+          { source: 'externo_comercial:antecedentes_criminais_pf_sinic', name: 'Antecedentes Criminais (PF/SINIC)' },
+        ],
+      },
+      precatorio_oficial: demoOfficialSources(),
+      certidoes: demoCertSources().sources,
+      externo_comercial: {},
+    };
+  }
+
+  function renderMasterSources(data) {
+    const s = data.summary || {};
+    let html = '';
+    if (data.message) html += '<p style="font-size:13px;color:var(--ink-soft);">' + escapeHtml(data.message) + '</p>';
+
+    html += '<div class="fontes-overview-grid">';
+    html += '<div class="fontes-overview-card"><div class="num">' + (s.total_precatorio_oficial ?? '—') + '</div><div class="lbl">Precatório oficial</div></div>';
+    html += '<div class="fontes-overview-card"><div class="num">' + (s.total_certidoes ?? '—') + '</div><div class="lbl">Certidões</div></div>';
+    html += '<div class="fontes-overview-card"><div class="num">' + (s.total_externo_comercial ?? '—') + '</div><div class="lbl">APIs externas/comerciais</div></div>';
+    html += '</div>';
+
+    function renderEntryGroup(title, cls, entries) {
+      if (!entries || !entries.length) return '';
+      let g = '<section class="card"><h2>' + escapeHtml(title) + '</h2><div class="summary-chips">';
+      entries.forEach((e) => { g += '<span class="status-chip ' + cls + '">' + escapeHtml(e.name || e.source) + '</span>'; });
+      g += '</div></section>';
+      return g;
+    }
+    html += renderEntryGroup('Prontas para uso agora', 'success', s.prontos_para_uso_agora);
+    html += renderEntryGroup('Dependem de credencial ou contrato', 'danger', s.dependem_de_credencial_ou_contrato);
+    html += renderEntryGroup('Exigem automação de navegador / têm captcha', 'highlight', s.exigem_automacao_de_navegador_ou_tem_captcha);
+
+    // Reaproveita o render por grupo já existente para a parte de precatório oficial.
+    if (data.precatorio_oficial) {
+      html += renderOfficialSourcesHtml({ sources: data.precatorio_oficial, summary: null });
+    }
+
+    if (data.certidoes) {
+      html += '<section class="card"><h2>Certidões</h2>';
+      Object.values(data.certidoes).forEach((src) => {
+        const meta = certStatusMeta(src);
+        html += '<div class="source-row"><span class="name">' + escapeHtml(src.name) + '</span><span class="status-chip ' + meta.cls + '">' + escapeHtml(meta.label) + '</span></div>';
+      });
+      html += '</section>';
+    }
+
+    el('fontesResultsArea').innerHTML = html;
+  }
+
+  async function handleFontesLoad() {
+    el('fontesResultsArea').innerHTML = '<div class="loading"><span class="spinner"></span>Carregando fontes…</div>';
+    if (isDemo()) {
+      setTimeout(() => renderMasterSources(demoMasterSources()), 400);
+      return;
+    }
+    try {
+      const data = await apiFetch('/api/sources', { method: 'GET', headers: buildHeaders(false) });
+      renderMasterSources(data);
+    } catch (e) {
+      el('fontesResultsArea').innerHTML = '<div class="error-box">' + escapeHtml(e.message) + '</div>';
+    }
+  }
+  el('btnFontesLoad').addEventListener('click', handleFontesLoad);
+
+  // ================= MODO SIMPLES =================
+
+  const TRIBUNAL_FRIENDLY_NAMES = {
+    TRF1: 'Tribunal Regional Federal da 1ª Região',
+    TRF2: 'Tribunal Regional Federal da 2ª Região',
+    TRF3: 'Tribunal Regional Federal da 3ª Região',
+    TRF4: 'Tribunal Regional Federal da 4ª Região',
+    TRF5: 'Tribunal Regional Federal da 5ª Região',
+    TRF6: 'Tribunal Regional Federal da 6ª Região',
+    STJ: 'Superior Tribunal de Justiça',
+    CJF: 'Conselho da Justiça Federal',
+  };
+  function tribunalFriendlyName(code) { return TRIBUNAL_FRIENDLY_NAMES[code] || code || 'não identificado ainda'; }
+
+  function setMode(simple) {
+    document.body.classList.toggle('simple-mode', simple);
+    el('btnModeSimple').classList.toggle('active', simple);
+    el('btnModeAvancado').classList.toggle('active', !simple);
+  }
+  el('btnModeSimple').addEventListener('click', () => setMode(true));
+  el('btnModeAvancado').addEventListener('click', () => setMode(false));
+
+  function simpleMessage(text, kind) {
+    return '<div class="simple-message ' + kind + '">' + escapeHtml(text) + '</div>';
+  }
+  function simpleLoading(text) {
+    return '<div class="simple-loading"><span class="spinner"></span>' + escapeHtml(text) + '</div>';
+  }
+  function simpleRow(label, value) {
+    if (value == null || value === '') return '';
+    return '<div class="simple-field"><span class="simple-field-label">' + escapeHtml(label) + ':</span> <span class="simple-field-value">' + escapeHtml(String(value)) + '</span></div>';
+  }
+
+  function renderSimpleResult(dossier) {
+    const area = el('simpleResultsArea');
+    const proc = dossier.processual_datajud_private_apis || dossier;
+    const results = (proc && proc.results) || [];
+    let html = '';
+
+    if (dossier._demo) {
+      html += '<div class="simple-demo-banner">Isto é um EXEMPLO, pra você ver como fica. Toque em "Preciso configurar o acesso ao sistema" pra buscar de verdade.</div>';
+    }
+
+    if (!results.length) {
+      html += simpleMessage('Não encontramos nada com esse dado. Confira se digitou certo, ou tente de outro jeito (nome completo, ou só números do CPF).', 'info');
+      area.innerHTML = html;
+      return;
+    }
+
+    results.forEach((r) => {
+      const temIndicio = (r.precatorio_score || 0) > 0;
+      html += '<div class="simple-result-card">';
+      html += '<div class="simple-result-headline">' + (temIndicio ? '💰 Isto pode ser um precatório' : '📄 Encontramos um processo') + '</div>';
+      if (r.numero_processo) html += simpleRow('Número do processo', formatCnj(r.numero_processo));
+      html += simpleRow('Onde está', tribunalFriendlyName(r.tribunal));
+      if (r.credor_nome) html += simpleRow('Nome', r.credor_nome);
+      if (r.classe) html += simpleRow('Tipo', r.classe);
+      if (r.ente_devedor) html += simpleRow('Quem deve', r.ente_devedor);
+      if (r.valor_requisitado != null) html += simpleRow('Valor', formatCurrencyStj(r.valor_requisitado));
+      if (r.ano_orcamento) html += simpleRow('Ano do orçamento', r.ano_orcamento);
+      if (temIndicio) html += simpleRow('Chance de ser precatório', r.precatorio_score + '%');
+      html += '</div>';
+    });
+
+    const missing = dossier.summary && dossier.summary.missing_recommended_fields;
+    if (missing && missing.length) {
+      html += simpleMessage('Encontramos indícios, mas ainda faltam algumas confirmações oficiais pra ter certeza de tudo. Fale com quem cuida do sistema pra revisar os detalhes técnicos, se precisar.', 'info');
+    }
+
+    area.innerHTML = html;
+  }
+
+  async function handleSimpleSearch() {
+    const key = el('simpleSearchKey').value.trim();
+    if (!key) {
+      el('simpleResultsArea').innerHTML = simpleMessage('Digite alguma coisa pra eu poder buscar — um nome, um CPF ou um número de processo.', 'info');
+      return;
+    }
+    el('simpleResultsArea').innerHTML = simpleLoading('Procurando, um instante...');
+
+    if (isDemo()) {
+      setTimeout(() => renderSimpleResult(demoDossier('auto', key)), 700);
+      return;
+    }
+    try {
+      const body = { provider: 'auto', search_type: 'auto', search_key: key, extra_params: {} };
+      const data = await apiFetch('/api/dossier', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
+      renderSimpleResult(data);
+    } catch (e) {
+      el('simpleResultsArea').innerHTML = simpleMessage('Não consegui buscar agora. Peça pra alguém checar a conexão do sistema.', 'error');
+    }
+  }
+
+  el('btnSimpleDossie').addEventListener('click', handleSimpleSearch);
+  el('simpleSearchKey').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') handleSimpleSearch(); });
+
+  // ================= CERTIDÃO POR TRIBUNAL =================
+
+  const CERT_FIELD_LABELS = {
+    nome: 'Nome completo', cpf: 'CPF', cnpj: 'CNPJ', cpf_cnpj: 'CPF ou CNPJ', rg: 'RG',
+    data_nascimento: 'Data de nascimento', nome_mae: 'Nome da mãe', nome_pai: 'Nome do pai',
+    naturalidade: 'Naturalidade (cidade onde nasceu)', email: 'E-mail', telefone: 'Telefone',
+    finalidade: 'Finalidade (motivo do pedido)', titulo_eleitor: 'Título de eleitor',
+    nacionalidade: 'Nacionalidade', endereco: 'Endereço', tipo_pessoa: 'Tipo de pessoa (física ou jurídica)',
+    tipo_certidao: 'Tipo de certidão', instancia: 'Instância (1º ou 2º grau)', orgao_expedidor: 'Órgão expedidor do RG',
+  };
+  const CAMPOS_PADRAO_APROXIMADOS = ['nome', 'cpf_cnpj', 'data_nascimento', 'nome_mae'];
+
+  function demoCertTribunais() {
+    // Espelha os TJs de fato pesquisados no backend — mesmos campos, mesmas fontes.
+    return {
+      tjmg_certidoes: { name: 'TJMG (Minas Gerais)', official_url: 'https://www8.tjmg.jus.br/certidaoJudicial/faces/emitirCertidao.xhtml', accepted_inputs: ['nome', 'cpf_cnpj'], confirmado: true },
+      tjsp_certidoes: { name: 'TJSP (São Paulo)', official_url: 'https://www.tjsp.jus.br/Certidoes/Certidoes/CertidoesDuvidasFrequentes', accepted_inputs: ['nome', 'rg', 'cpf_cnpj', 'nome_pai', 'nome_mae', 'data_nascimento', 'naturalidade', 'email'], confirmado: true },
+      tjrj_certidoes: { name: 'TJRJ (Rio de Janeiro)', official_url: 'https://www4.tjrj.jus.br/portal-extrajudicial/certidao/judicial/solicitar', accepted_inputs: ['nome', 'cpf', 'rg', 'data_nascimento', 'nome_pai', 'nome_mae'], confirmado: true },
+      tjpe_certidoes: { name: 'TJPE (Pernambuco)', official_url: 'https://certidoesunificadas.app.tjpe.jus.br/', accepted_inputs: ['nome', 'cpf', 'titulo_eleitor', 'data_nascimento', 'nacionalidade', 'endereco'], confirmado: true },
+      tjce_certidoes: { name: 'TJCE (Ceará)', official_url: 'https://sirece.tjce.jus.br/sirece-web/nova/solicitacao.jsf', accepted_inputs: ['nome', 'cpf_cnpj', 'tipo_pessoa', 'instancia'], confirmado: true },
+      tjgo_certidoes: { name: 'TJGO (Goiás)', official_url: 'https://projudi.tjgo.jus.br/CertidaoNegativaPositivaPublica', accepted_inputs: ['nome', 'cpf_cnpj', 'tipo_pessoa'], confirmado: true },
+      tjpr_certidoes: { name: 'TJPR (Paraná)', official_url: 'https://portal.tjpr.jus.br/portletforms/publico/frm.do?idFormulario=4667', accepted_inputs: ['nome', 'cpf_cnpj', 'tipo_certidao'], confirmado: true },
+      tjrs_certidoes: { name: 'TJRS (Rio Grande do Sul)', official_url: 'https://www.tjrs.jus.br/novo/processos-e-servicos/servicos-processuais/emissao-de-antecedentes-e-certidoes/', accepted_inputs: ['nome', 'cpf_cnpj'], confirmado: true },
+      tjsc_certidoes: { name: 'TJSC (Santa Catarina)', official_url: 'https://certidoes.tjsc.jus.br/', accepted_inputs: ['nome', 'cpf', 'rg', 'orgao_expedidor', 'nome_mae', 'nome_pai', 'data_nascimento', 'email', 'telefone', 'finalidade'], confirmado: true },
+      tjdft_certidoes: { name: 'TJDFT (Distrito Federal)', official_url: 'https://cnc.tjdft.jus.br/solicitacao-externa', accepted_inputs: ['nome', 'cpf_cnpj', 'nome_mae'], confirmado: true },
+      tjba_certidoes: { name: 'TJBA (Bahia)', official_url: 'https://esaj.tjba.jus.br/sco/abrirCadastro.do', accepted_inputs: [], confirmado: false },
+    };
+  }
+
+  function showSimpleCertPanel() {
+    el('simplePanel').style.display = 'none';
+    el('simpleResultsArea').innerHTML = '';
+    el('simpleCertPanel').style.display = 'block';
+    if (isDemo()) {
+      renderCertTribunalList(demoCertTribunais());
+    } else {
+      loadRealCertTribunais();
+    }
+  }
+  function hideSimpleCertPanel() {
+    el('simpleCertPanel').style.display = 'none';
+    el('certFieldsArea').innerHTML = '';
+    el('simplePanel').style.display = 'block';
+  }
+  el('linkCertVoltar').addEventListener('click', (ev) => { ev.preventDefault(); hideSimpleCertPanel(); });
+
+  async function loadRealCertTribunais() {
+    el('certTribunalList').innerHTML = '<div class="simple-loading"><span class="spinner"></span>Carregando tribunais…</div>';
+    try {
+      const data = await apiFetch('/api/certificates/sources', { method: 'GET', headers: buildHeaders(false) });
+      const tribunais = {};
+      Object.entries(data.sources || {}).forEach(([key, src]) => {
+        if ((src.certificate_types || []).some((t) => t === 'civel' || t === 'criminal')) {
+          tribunais[key] = { name: src.name, official_url: src.official_url, accepted_inputs: src.accepted_inputs || [], confirmado: (src.accepted_inputs || []).length > 0 };
+        }
+      });
+      renderCertTribunalList(tribunais);
+    } catch (e) {
+      el('certTribunalList').innerHTML = simpleMessage('Não consegui carregar a lista de tribunais agora.', 'error');
+    }
+  }
+
+  function renderCertTribunalList(tribunais) {
+    let html = '';
+    Object.entries(tribunais).forEach(([key, t]) => {
+      html += '<div class="cert-tribunal-card" data-tribunal-key="' + escapeHtml(key) + '">';
+      html += '<span>' + escapeHtml(t.name) + '</span>';
+      html += t.confirmado
+        ? '<span class="badge-confirmado">Sabemos os campos</span>'
+        : '<span class="badge-aproximado">Ainda não confirmado</span>';
+      html += '</div>';
+    });
+    el('certTribunalList').innerHTML = html;
+    document.querySelectorAll('.cert-tribunal-card').forEach((card) => {
+      card.addEventListener('click', () => selectCertTribunal(card.dataset.tribunalKey, tribunais[card.dataset.tribunalKey]));
+    });
+  }
+
+  function selectCertTribunal(key, tribunal) {
+    document.querySelectorAll('.cert-tribunal-card').forEach((c) => c.classList.toggle('selected', c.dataset.tribunalKey === key));
+    const campos = (tribunal.accepted_inputs && tribunal.accepted_inputs.length) ? tribunal.accepted_inputs : CAMPOS_PADRAO_APROXIMADOS;
+    let html = '<div class="cert-field-block"><div style="font-size:19px;font-weight:700;color:var(--navy-950);">' + escapeHtml(tribunal.name) + '</div>';
+    if (!tribunal.confirmado) {
+      html += '<div class="cert-note-approx">Ainda não confirmamos os campos exatos deste tribunal — a lista abaixo é a mais comum entre os outros tribunais, pode faltar ou sobrar algo. O link oficial abaixo tem certeza.</div>';
+    }
+    campos.forEach((campo) => {
+      const label = CERT_FIELD_LABELS[campo] || campo;
+      html += '<label for="certf_' + escapeHtml(campo) + '">' + escapeHtml(label) + '</label>';
+      html += '<input type="text" id="certf_' + escapeHtml(campo) + '" data-campo="' + escapeHtml(campo) + '" />';
+    });
+    html += '<button class="simple-button" id="btnCertPreparar" type="button" style="margin-top:20px;">Preparar meu resumo</button>';
+    html += '<div id="certResumoArea"></div></div>';
+    el('certFieldsArea').innerHTML = html;
+    el('btnCertPreparar').addEventListener('click', () => prepararResumoCertidao(tribunal));
+  }
+
+  function prepararResumoCertidao(tribunal) {
+    let html = '<div class="cert-summary-box"><b>Leve estas informações ao site oficial:</b><br>';
+    document.querySelectorAll('#certFieldsArea input[data-campo]').forEach((input) => {
+      const label = CERT_FIELD_LABELS[input.dataset.campo] || input.dataset.campo;
+      if (input.value.trim()) html += escapeHtml(label) + ': <b>' + escapeHtml(input.value.trim()) + '</b><br>';
+    });
+    html += '</div>';
+    html += '<a class="cert-official-link" href="' + escapeHtml(tribunal.official_url) + '" target="_blank" rel="noopener">Abrir site oficial do tribunal →</a>';
+    el('certResumoArea').innerHTML = html;
+    el('certResumoArea').scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+
+  setMode(true); // Modo simples é o padrão ao abrir a tela.
+})();
 </script>
 </body>
 </html>
