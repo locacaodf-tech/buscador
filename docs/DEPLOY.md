@@ -2,6 +2,10 @@
 
 Este guia cobre 3 formas de colocar o Buscador de Processos numa URL HTTPS acessível de fora, sem expor nenhum token. Escolha uma para começar; dá pra trocar depois sem perder nada (o projeto continua sendo o mesmo FastAPI + SQLite).
 
+> **Dois arquivos de Render, escolha um só:**
+> - `render.yaml` — plano **gratuito**, sem disco persistente. Uploads do STJ e evidências manuais podem se perder num reinício. Bom pra testar.
+> - `render-production.yaml` — plano pago (~$7/mês), **com disco persistente** montado em `/data`. `STJ_UPLOAD_DIR` e `EVIDENCE_UPLOAD_DIR` apontam pra lá, então uploads e evidências sobrevivem a reinícios. Pra renomear esse pro ativo: `cp render-production.yaml render.yaml` antes do deploy.
+
 **Antes de tudo, em qualquer uma das 3 opções:**
 
 1. Preencha o `.env` local (nunca vai pro Git, nunca vai pro código):
@@ -129,7 +133,7 @@ Depois de ter uma URL HTTPS pronta (de qualquer uma das 3 opções):
 4. Depois de logado, o painel funciona normal: campo de busca, seletor de provedor, tribunais etc.
 5. Opcional: no Safari, toque em **Compartilhar > Adicionar à Tela de Início** — fica com ícone de app, sem barra de navegador.
 
-A sessão fica salva por 14 dias (cookie). Pra sair, toque em **Sair** no topo da tela.
+A sessão fica salva por 90 dias por padrão (configurável via `SESSION_TTL_DAYS` no `.env`). Pra sair, toque em **Sair** no topo da tela.
 
 ---
 
