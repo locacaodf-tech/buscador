@@ -1,47 +1,42 @@
-# Claude Buscador de Processos
+# Buscador Interno de Processos, Precatórios, RPVs e Certidões
 
-Solução interna para consulta e triagem de processos, precatórios, RPVs e requisitórios.
+Ferramenta interna de diligência: você digita um dado (CPF, CNPJ, nome, OAB, CNJ, sequencial do STJ ou número de precatório/RPV/requisitório) e ela identifica sozinha o que é, consulta as fontes reais já integradas, e diz em português — sem JSON, sem jargão — o que encontrou, o que ainda falta, e qual a próxima ação.
 
-## Ajuste central desta versão
+## Como usar (2 minutos)
 
-O sistema **não presume que você sempre buscará por CPF/nome**. Ele aceita um identificador flexível e resolve o melhor caminho conforme o que cada API aceitar.
+1. Acesse a URL publicada (ou rode local, veja abaixo) e faça login com a senha configurada.
+2. A tela abre direto no hub: um campo de **Busca livre de diligência** no topo, e 4 botões grandes (Analisar processo por CNJ, Consultar STJ por XLSX/sequencial, Localizar precatório/RPV, Consultar/planejar certidões).
+3. Digite qualquer dado na busca livre e toque em "Identificar e buscar" — ela decide sozinha pra onde ir.
+4. Toda busca fica salva automaticamente: aparece "Diligência salva nº X" com um botão "Abrir dossiê" (página HTML própria, imprimível). A lista "Últimas diligências" no hub deixa reabrir qualquer uma depois.
+5. Toque em "⚙️ Ver se minha ferramenta está pronta" a qualquer momento pra ver o que está configurado (DataJud, STJ, Serpro, banco, login) sem precisar decorar nada técnico.
 
-Identificadores suportados no modelo interno:
+## O que funciona de verdade hoje, sem depender de provider pago nenhum
 
-- nome da parte;
-- CPF;
-- CNPJ;
-- OAB;
-- número CNJ;
-- número do processo;
-- número do requisitório;
-- número do precatório;
-- número da RPV;
-- varredura geral por indícios de precatório/RPV.
+- **CNJ** → consulta a API pública do DataJud/CNJ (chave pública oficial já embutida no código), infere o tribunal certo a partir do próprio número (não fica testando os 6 TRFs à toa).
+- **STJ** → você sobe o XLSX oficial de precatórios do STJ, e busca por sequencial, número de processo **ou nome do credor/beneficiário** — tudo dentro do arquivo real que você carregou, nunca inventado.
+- **Precatório/RPV/requisitório** → gera um plano operacional: quais fontes já dá pra consultar automaticamente, quais exigem credencial, quais exigem consulta manual, e o que falta informar.
+- **Certidões** → planejamento por UF/tipo (cível, criminal, Receita/PGFN, trabalhista), sempre dizendo se é automatizado, configurável ou manual — nunca finge "nada consta" sem certidão real.
+- **Evidência manual** → cola texto encontrado por fora ou anexa PDF/print/XLSX, vinculado à diligência.
+- **CPF/CNPJ/OAB isolados** (sem CNJ, sem nome, sem mais nenhum dado) → a ferramenta é honesta: não existe fonte nacional gratuita pra isso hoje, e ela explica isso claramente em vez de fingir que pesquisou. Fica pronta pra plugar um provider comercial no futuro (`app/services/providers/base.py`), mas isso é opcional, nunca obrigatório.
 
-Cada provedor/conector declara suas próprias capacidades em `/api/capabilities`. Isso é essencial porque **as exigências variam por API e por tribunal**. Um tribunal pode exigir CNJ; outro pode exigir CPF do beneficiário; outro pode exigir número do requisitório + ano-orçamento; outro pode exigir autenticação institucional.
+## Arquitetura por trás da busca livre
 
-## O que esta versão faz
+```text
+Tela (busca livre) ou qualquer outro cliente
+  -> POST /api/diligencia
+      -> app/services/diligencia_engine.py (identifica tipo, decide o que consultar)
+          -> DataJud (CNJ) | STJ XLSX (sequencial/processo/nome) | plano de precatório | plano de certidões
+      -> salva em DiligenciaLog
+      -> devolve resposta humana + diligencia_id
+```
 
-1. Consulta processos por **número CNJ** na API Pública do DataJud/CNJ.
-2. Faz varredura por **indícios de precatório/RPV** usando classes, assuntos e movimentos da TPU/SisPreq.
-3. Aceita busca livre por CPF, CNPJ, nome, OAB, CNJ, processo, requisitório, precatório ou RPV.
-4. Detecta automaticamente o tipo provável do identificador informado.
-5. Mantém um registry de capacidades por API/conector.
-6. Mantém histórico local em SQLite.
-7. Entrega tela simples para uso interno.
-8. Deixa conectores prontos para ligar em Judit, Escavador, Jusbrasil, SisPreq/PDPJ, CJF/TRFs e APIs próprias de tribunais quando houver credenciais.
+Endpoints do motor:
 
-## Limitação essencial
-
-A API Pública do DataJud não é uma API aberta de busca por CPF/nome de parte nem possui campo universal de número de requisitório/precatório/RPV. Ela é muito útil para número CNJ, metadados e movimentações públicas.
-
-Portanto, a estratégia correta é:
-
-- **número CNJ / processo no padrão CNJ**: DataJud;
-- **CPF, CNPJ, nome e OAB**: API privada licenciada ou integração oficial com credenciais;
-- **número de requisitório, precatório ou RPV**: SisPreq/PDPJ, CJF/TRF, portal/API específica do tribunal ou provedor privado que aceite esse identificador;
-- **número desconhecido**: o sistema classifica como `unknown` e tenta apenas conectores que declarem suporte.
+- `POST /api/diligencia` — ponto único de entrada (o que a busca livre da tela chama).
+- `GET /api/diligencias` — lista as últimas diligências salvas.
+- `GET /api/diligencias/{id}` — reabre uma diligência com todo o detalhe.
+- `GET /api/diligencias/{id}/dossie` — dossiê em HTML, imprimível.
+- `GET /api/diagnostico` — o que está configurado (sem expor nenhuma chave).
 
 ## Como rodar localmente
 
@@ -60,7 +55,41 @@ Abra:
 http://127.0.0.1:8000
 ```
 
-## Fluxo de busca
+## Camada mais técnica (Modo Avançado da tela / uso direto da API)
+
+Tudo abaixo continua existindo e funcionando — é o que a busca livre e os 4 botões usam por baixo. Fica disponível também pra quem quiser usar a API diretamente (scripts, outra IA, integração futura), sem precisar passar pela tela.
+
+### Ajuste central da API de busca (histórico do projeto)
+
+O sistema **não presume que você sempre buscará por CPF/nome**. Ele aceita um identificador flexível e resolve o melhor caminho conforme o que cada API aceitar.
+
+Identificadores suportados no modelo interno:
+
+- nome da parte;
+- CPF;
+- CNPJ;
+- OAB;
+- número CNJ;
+- número do processo;
+- número do requisitório;
+- número do precatório;
+- número da RPV;
+- varredura geral por indícios de precatório/RPV.
+
+Cada provedor/conector declara suas próprias capacidades em `/api/capabilities`. Isso é essencial porque **as exigências variam por API e por tribunal**. Um tribunal pode exigir CNJ; outro pode exigir CPF do beneficiário; outro pode exigir número do requisitório + ano-orçamento; outro pode exigir autenticação institucional.
+
+## Limitação essencial
+
+A API Pública do DataJud não é uma API aberta de busca por CPF/nome de parte nem possui campo universal de número de requisitório/precatório/RPV. Ela é muito útil para número CNJ, metadados e movimentações públicas.
+
+Portanto, a estratégia correta é:
+
+- **número CNJ / processo no padrão CNJ**: DataJud;
+- **CPF, CNPJ, nome e OAB**: API privada licenciada ou integração oficial com credenciais;
+- **número de requisitório, precatório ou RPV**: SisPreq/PDPJ, CJF/TRF, portal/API específica do tribunal ou provedor privado que aceite esse identificador;
+- **número desconhecido**: o sistema classifica como `unknown` e tenta apenas conectores que declarem suporte.
+
+## Fluxo de busca do `/api/search` (mais granular, por trás do `/api/diligencia`)
 
 ```text
 Usuário informa o que tem
@@ -281,21 +310,15 @@ O score é apenas triagem. O resultado precisa ser validado no processo, requisi
 4. APIs próprias de TJs estaduais para precatórios.
 5. Monitoramento recorrente por CPF/CNPJ/CNJ e por número de requisitório/precatório/RPV.
 
-## Comando para levar ao Claude
-
-```text
-Use este pacote como base. Não reescreva tudo. O ponto central é manter busca por identificadores flexíveis: nome, CPF, CNPJ, OAB, CNJ, número do processo, número do requisitório, número do precatório e número da RPV. Cada conector deve declarar suas capabilities: quais search_types aceita, quais required_fields exige e quais optional_fields aceita. Primeiro rode a aplicação, depois implemente apenas o conector real escolhido para CPF/nome ou para precatórios oficiais, registrando-o em CONNECTOR_CLASSES. Preserve DataJud para CNJ e precatorio_scan.
-```
-
 ## V8 — Raio-X Processual e Fontes Oficiais de Precatórios/LOA
 
-Esta versão adiciona a arquitetura de camadas para não confundir **indício processual via DataJud** com **confirmação oficial de precatório/RPV/LOA**.
+Esta seção documenta uma camada mais antiga do projeto (v8), que continua existindo e funcionando — não foi removida. Ela adiciona a arquitetura de camadas para não confundir **indício processual via DataJud** com **confirmação oficial de precatório/RPV/LOA**.
 
-Novos endpoints protegidos pelo mesmo mecanismo de autenticação interna:
+Endpoints protegidos pelo mesmo mecanismo de autenticação interna:
 
 - `GET /api/official-precatorio/sources` — matriz de fontes oficiais/institucionais mapeadas.
 - `POST /api/official-precatorio/plan` — plano de busca por camadas para chegar a precatório/RPV/LOA.
-- `POST /api/dossier` — combina a busca processual existente com o plano oficial de precatório/orçamento.
+- `POST /api/dossier` — combina a busca processual existente com o plano oficial de precatório/orçamento numa resposta só, em JSON. **Não confundir** com o dossiê da v29 (`GET /api/diligencias/{id}/dossie`, com "ê"), que é uma página HTML de uma diligência já salva no banco — são dois recursos diferentes que coexistem.
 
 Documento principal: `docs/RAIO_X_PRECATORIOS_ARQUITETURA.md`.
 
