@@ -380,6 +380,7 @@
   }
   .simple-message.info { background: var(--paper-muted); color: var(--navy-800); }
   .simple-message.error { background: var(--danger-bg); color: var(--danger); }
+  .simple-message.success { background: var(--success-bg); color: #166534; }
   .simple-demo-banner {
     font-size: 16px; background: var(--gold-soft); color: #6b4d1f; padding: 14px 16px;
     border-radius: 12px; margin-bottom: 16px; line-height: 1.5; text-align: center; font-weight: 600;
@@ -449,6 +450,50 @@
   .format-status.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
   .field-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
   @media (max-width: 720px) { .field-grid-3 { grid-template-columns: 1fr; } }
+
+  .hub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 8px; }
+  @media (max-width: 480px) { .hub-grid { grid-template-columns: 1fr; } }
+  .hub-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    padding: 26px 14px; min-height: 130px; border-radius: 18px; border: 2px solid var(--border);
+    background: var(--paper); cursor: pointer; text-align: center;
+  }
+  .hub-btn:active { border-color: var(--gold); background: var(--gold-soft); }
+  .hub-icon { font-size: 34px; }
+  .hub-label { font-size: 16px; font-weight: 700; color: var(--navy-950); line-height: 1.3; }
+  .voltar-hub { display: inline-block; font-size: 16px; color: var(--navy-800); text-decoration: underline; }
+
+  .proxima-acao-box {
+    margin-top: 16px; padding: 16px 18px; border-radius: 14px; background: var(--navy-950); color: #fff;
+  }
+  .proxima-acao-box .titulo { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; opacity: .8; margin-bottom: 6px; }
+  .proxima-acao-box .texto { font-size: 16px; line-height: 1.5; font-weight: 600; }
+
+  .plano-grupo { margin-top: 18px; }
+  .plano-grupo .grupo-titulo { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--navy-800); margin-bottom: 8px; }
+  .plano-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 8px; font-size: 15px;
+  }
+  .plano-item.disponivel { background: var(--success-bg); border-color: #bfe3cd; }
+  .plano-item.credencial { background: var(--danger-bg); border-color: #f3c6c1; }
+  .plano-item.manual { background: #fdf3e3; border-color: #f2ddb0; }
+  .plano-item.nao_automatizado { background: var(--paper-muted); }
+  .plano-item a { font-size: 13px; font-weight: 700; }
+
+  .dados-faltantes-box {
+    margin-top: 14px; padding: 14px 16px; border-radius: 12px; background: #fdf3e3; border: 1px solid #f2ddb0;
+    font-size: 15px; line-height: 1.6;
+  }
+
+  .campo-resultado { font-size: 16px; line-height: 1.9; }
+  .campo-resultado .rotulo { color: var(--ink-soft); font-weight: 600; }
+  .campo-resultado .valor { color: var(--ink); font-weight: 700; }
+  .indicio-precatorio-box {
+    margin-top: 18px; padding: 18px; border-radius: 16px; background: var(--gold-soft); border: 2px solid var(--gold);
+  }
+  .indicio-precatorio-box .titulo { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--navy-950); margin-bottom: 10px; }
+  .evidencia-box { margin-top: 20px; padding-top: 16px; border-top: 2px dashed var(--border); }
 </style>
 <body>
 
@@ -473,33 +518,90 @@
   </div>
 
   <section class="simple-card" id="simplePanel">
-    <h2 class="simple-title">O que você quer descobrir?</h2>
-    <p class="simple-subtitle">Escolha o tipo de informação, digite do jeito que você tiver, e o sistema orienta o formato correto antes de buscar.</p>
+    <h2 class="simple-title">O que você precisa fazer agora?</h2>
+    <p class="simple-subtitle">Escolha uma opção. Cada uma te leva direto pro que você precisa, sem rodeio.</p>
+    <div class="hub-grid">
+      <button class="hub-btn" id="btnHubCnj" type="button">
+        <span class="hub-icon">📄</span>
+        <span class="hub-label">Analisar processo por CNJ</span>
+      </button>
+      <button class="hub-btn" id="btnHubStj" type="button">
+        <span class="hub-icon">📊</span>
+        <span class="hub-label">Consultar STJ por XLSX/sequencial</span>
+      </button>
+      <button class="hub-btn" id="btnHubPrecatorio" type="button">
+        <span class="hub-icon">💰</span>
+        <span class="hub-label">Localizar precatório/RPV</span>
+      </button>
+      <button class="hub-btn" id="btnHubCertidoes" type="button">
+        <span class="hub-icon">📋</span>
+        <span class="hub-label">Consultar/planejar certidões</span>
+      </button>
+    </div>
+  </section>
 
-    <label for="simpleSearchType">O que você está informando?</label>
-    <select id="simpleSearchType">
-      <option value="auto">Não sei / detectar automaticamente</option>
-      <option value="cpf">CPF</option>
-      <option value="cnpj">CNPJ</option>
-      <option value="name">Nome completo</option>
-      <option value="oab">OAB</option>
-      <option value="cnj">Número CNJ</option>
-      <option value="numero_processo">Número de processo</option>
-      <option value="precatorio">Número do precatório</option>
-      <option value="requisitorio">Número do requisitório</option>
-      <option value="rpv">Número da RPV</option>
-      <option value="stj_sequencial">Sequencial STJ</option>
+  <!-- ===== Painel: Analisar processo por CNJ ===== -->
+  <section class="simple-card" id="panelCnj" style="display:none;">
+    <a href="#" class="voltar-hub" data-voltar>← Voltar</a>
+    <h2 class="simple-title" style="margin-top:14px;">Analisar processo por CNJ</h2>
+    <p class="simple-subtitle">Digite o número CNJ do processo, com ou sem pontuação.</p>
+    <label for="cnjInput">Número CNJ</label>
+    <input type="text" id="cnjInput" class="simple-input" placeholder="Ex.: 0032681-47.2017.4.01.3400" autocomplete="off" />
+    <button class="simple-button" id="btnCnjAnalisar" type="button">Analisar processo</button>
+    <div id="cnjResultArea"></div>
+  </section>
+
+  <!-- ===== Painel: Localizar precatório/RPV ===== -->
+  <section class="simple-card" id="panelPrecatorioRpv" style="display:none;">
+    <a href="#" class="voltar-hub" data-voltar>← Voltar</a>
+    <h2 class="simple-title" style="margin-top:14px;">Localizar precatório/RPV</h2>
+    <p class="simple-subtitle">Preencha o que você já sabe — o que faltar, a ferramenta te diz onde buscar.</p>
+
+    <label for="precTribunal">Tribunal <span class="hint">— se souber</span></label>
+    <select id="precTribunal">
+      <option value="">—</option>
+      <option>TRF1</option><option>TRF2</option><option>TRF3</option>
+      <option>TRF4</option><option>TRF5</option><option>TRF6</option>
+      <option>STJ</option><option>TJDFT</option><option>TJSP</option><option>Outro</option>
     </select>
 
-    <label for="simpleSearchKey" style="margin-top:14px;">Valor pesquisado</label>
-    <input type="text" id="simpleSearchKey" class="simple-input" placeholder="Ex.: CPF, CNJ, nome, OAB ou sequencial" autocomplete="off" />
-    <div id="simpleInputGuide" class="input-guide"></div>
-    <div id="simpleFormatStatus" class="format-status"></div>
+    <label for="precTipo">Tipo</label>
+    <select id="precTipo">
+      <option value="precatorio_number">Precatório</option>
+      <option value="rpv_number">RPV</option>
+      <option value="requisitorio_number">Requisitório</option>
+    </select>
+
+    <div class="field-grid-3">
+      <div><label for="precCnj">CNJ <span class="hint">— se tiver</span></label><input type="text" id="precCnj" placeholder="Número do processo" /></div>
+      <div><label for="precNumero">Nº precatório/requisitório <span class="hint">— se tiver</span></label><input type="text" id="precNumero" /></div>
+      <div><label for="precSequencial">Sequencial <span class="hint">— se tiver</span></label><input type="text" id="precSequencial" /></div>
+    </div>
+    <div class="field-grid-3">
+      <div><label for="precAno">Ano-orçamento <span class="hint">— se souber</span></label><input type="text" inputmode="numeric" id="precAno" placeholder="2027" /></div>
+      <div><label for="precDocumento">CPF/CNPJ <span class="hint">— se tiver</span></label><input type="text" id="precDocumento" /></div>
+      <div><label for="precNome">Nome <span class="hint">— se tiver</span></label><input type="text" id="precNome" /></div>
+    </div>
+
+    <button class="simple-button" id="btnPrecatorioLocalizar" type="button">Gerar plano de busca</button>
+    <div id="precatorioResultArea"></div>
+  </section>
+
+  <section id="simpleResultsArea"></section>
+
+  <section class="simple-card" id="simpleCertPanel" style="display:none;">
+    <a href="#" class="voltar-hub" data-voltar>← Voltar</a>
+    <h2 class="simple-title" style="margin-top:14px;">Certidão</h2>
+    <p class="simple-subtitle">Diga quem é e o tipo de certidão. A gente mostra a fonte certa e o que fazer.</p>
 
     <div class="field-grid-3">
       <div>
-        <label for="simpleUf">UF <span class="hint">— se souber</span></label>
-        <select id="simpleUf">
+        <label for="certPessoaTipo">Pessoa</label>
+        <select id="certPessoaTipo"><option value="fisica">Física</option><option value="juridica">Jurídica</option></select>
+      </div>
+      <div>
+        <label for="certUf">UF <span class="hint">— se souber</span></label>
+        <select id="certUf">
           <option value="">—</option>
           <option>AC</option><option>AL</option><option>AP</option><option>AM</option>
           <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
@@ -511,34 +613,23 @@
         </select>
       </div>
       <div>
-        <label for="simpleTribunal">Tribunal <span class="hint">— se souber</span></label>
-        <select id="simpleTribunal">
-          <option value="">—</option>
-          <option>TRF1</option><option>TRF2</option><option>TRF3</option>
-          <option>TRF4</option><option>TRF5</option><option>TRF6</option>
-          <option>STJ</option><option>STF</option><option>TST</option><option>TJDFT</option>
+        <label for="certTipoCertidao">Tipo</label>
+        <select id="certTipoCertidao">
+          <option value="civel">Cível</option>
+          <option value="criminal">Criminal</option>
+          <option value="fiscal_cnd">Receita/PGFN (fiscal)</option>
+          <option value="trabalhista_cndt">Trabalhista (CNDT)</option>
         </select>
       </div>
-      <div>
-        <label for="simpleAnoOrcamento">Ano-orçamento <span class="hint">— se souber</span></label>
-        <input type="text" inputmode="numeric" id="simpleAnoOrcamento" placeholder="2026 ou 2027" />
-      </div>
     </div>
+    <label for="certNomeGuia">Nome <span class="hint">— opcional nesta etapa</span></label>
+    <input type="text" id="certNomeGuia" autocomplete="off" />
+    <label for="certDocGuia">CPF/CNPJ <span class="hint">— opcional nesta etapa</span></label>
+    <input type="text" id="certDocGuia" autocomplete="off" />
+    <button class="simple-button" id="btnCertGuiarFonte" type="button">Ver fonte recomendada</button>
 
-    <div class="diligencia-actions">
-      <button class="primary" id="btnSimpleDossie" type="button">Montar Dossiê</button>
-      <button class="secondary" id="btnSimpleCertidoes" type="button">Consultar Certidões</button>
-      <button class="secondary" id="btnSimplePrecatorio" type="button">Consultar Precatório/STJ</button>
-      <button class="secondary" id="btnSimpleFontes" type="button">Ver Fontes</button>
-    </div>
-  </section>
-  <section id="simpleResultsArea"></section>
-
-  <section class="simple-card" id="simpleCertPanel" style="display:none;">
-    <a href="#" id="linkCertVoltar" style="font-size:16px; color:var(--navy-800);">← Voltar</a>
-    <h2 class="simple-title" style="margin-top:14px;">Certidão</h2>
-    <p class="simple-subtitle">Escolha o tribunal. A gente mostra exatamente o que ele pede.</p>
-    <div id="certTribunalList"></div>
+    <div id="certGuiaResultado"></div>
+    <div id="certTribunalList" style="margin-top:18px;"></div>
     <div id="certFieldsArea"></div>
   </section>
 
@@ -1638,17 +1729,6 @@
     statusEl.textContent = normalized.message;
   }
 
-  function buildSimpleExtraParams() {
-    const params = {};
-    const uf = el('simpleUf').value.trim();
-    const tribunal = el('simpleTribunal').value.trim();
-    const ano = el('simpleAnoOrcamento').value.trim();
-    if (uf) params.uf = uf;
-    if (tribunal) params.tribunal = tribunal;
-    if (ano) params.ano_orcamento = /^\d+$/.test(ano) ? Number(ano) : ano;
-    return params;
-  }
-
   // ================= Diligência diária (hub do Modo Simples) =================
 
   function demoDossier(searchType, searchKey) {
@@ -1673,30 +1753,275 @@
     };
   }
 
-  function simpleValue() {
-    const raw = el('simpleSearchKey').value.trim();
-    const normalized = normalizeSearchValue(el('simpleSearchType').value, raw, 'simpleUf');
-    return normalized.value || raw;
+  // ================= Hub de 4 botões (MVP operacional) =================
+
+  const PAINEIS = ['simplePanel', 'panelCnj', 'panelPrecatorioRpv', 'simpleCertPanel'];
+  function mostrarPainel(idParaMostrar) {
+    PAINEIS.forEach((id) => { el(id).style.display = (id === idParaMostrar) ? 'block' : 'none'; });
+    el('simpleResultsArea').innerHTML = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  document.querySelectorAll('[data-voltar]').forEach((link) => {
+    link.addEventListener('click', (ev) => { ev.preventDefault(); mostrarPainel('simplePanel'); });
+  });
+
+  el('btnHubCnj').addEventListener('click', () => mostrarPainel('panelCnj'));
+  el('btnHubStj').addEventListener('click', () => { setMode(false); switchTab('stj'); });
+  el('btnHubPrecatorio').addEventListener('click', () => mostrarPainel('panelPrecatorioRpv'));
+  el('btnHubCertidoes').addEventListener('click', () => { mostrarPainel('simpleCertPanel'); el('certGuiaResultado').innerHTML = ''; el('certTribunalList').innerHTML = ''; el('certFieldsArea').innerHTML = ''; });
+
+  // Tradutor de jargão técnico -> linguagem operacional. Usado em toda
+  // resposta que expõe integration_status/source_type de qualquer registry.
+  const STATUS_EM_PORTUGUES = {
+    implemented: 'Consulta automática disponível.',
+    implemented_partial: 'Consulta parcial disponível — nem todos os campos foram confirmados.',
+    implemented_configurable: 'Pronta pra usar assim que a chave/contrato for configurado.',
+    source_mapping_required: 'Fonte ainda não automatizada. Use o link oficial abaixo.',
+    mapped_public_dashboard: 'Painel público identificado, ainda sem busca automática — use o link oficial.',
+    public_form_to_implement: 'Formulário público identificado, ainda sem automação — use o link oficial.',
+    router_to_implement: 'Fonte identificada, mas depende de outro sistema (roteamento) ainda não automatizado.',
+    requires_credentials: 'Esta fonte exige credencial/convênio institucional.',
+    requires_institutional_credentials: 'Esta fonte exige credencial/convênio institucional.',
+    requires_api_contratada: 'Esta fonte exige contrato de API pago.',
+    captcha_detected: 'Esta fonte tem captcha — só dá pra fazer manualmente pelo link oficial.',
+    not_researched: 'Fonte ainda não pesquisada em detalhe — use o link oficial se precisar agora.',
+    nao_integrado: 'Fonte mapeada, mas ainda não automatizada. Use o link oficial abaixo.',
+    requer_api_contratada: 'Exige contrato de API pago — emissão manual grátis disponível no link oficial.',
+  };
+  function statusEmPortugues(status) {
+    return STATUS_EM_PORTUGUES[status] || 'Status não automatizado — confira o link oficial.';
+  }
+  function proximaAcaoBox(texto) {
+    return '<div class="proxima-acao-box"><div class="titulo">Próxima ação recomendada</div><div class="texto">' + escapeHtml(texto) + '</div></div>';
+  }
+  function campoResultado(rotulo, valor) {
+    if (valor == null || valor === '') return '';
+    return '<div class="campo-resultado"><span class="rotulo">' + escapeHtml(rotulo) + ':</span> <span class="valor">' + escapeHtml(String(valor)) + '</span></div>';
   }
 
-  function handleSimpleCertidoes() {
-    showSimpleCertPanel();
-  }
-  function handleSimplePrecatorio() {
-    const v = simpleValue();
-    setMode(false);
-    switchTab('precatorio');
-    if (v) { el('searchKey').value = v; }
-  }
-  function handleSimpleFontes() {
-    setMode(false);
-    switchTab('fontes');
-    handleFontesLoad();
+  // ---------- Painel: Analisar processo por CNJ ----------
+
+  async function handleCnjAnalisar() {
+    const cnjDigitado = el('cnjInput').value.trim();
+    if (!cnjDigitado) {
+      el('cnjResultArea').innerHTML = simpleMessage('Digite o número CNJ do processo.', 'info');
+      return;
+    }
+    el('cnjResultArea').innerHTML = simpleLoading('Consultando DataJud...');
+    try {
+      const body = { provider: 'datajud', search_type: 'cnj', search_key: cnjDigitado, extra_params: {} };
+      const data = await apiFetch('/api/search', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
+      renderCnjResultado(data, cnjDigitado);
+    } catch (e) {
+      el('cnjResultArea').innerHTML = simpleMessage('Não consegui consultar agora: ' + e.message, 'error');
+    }
   }
 
-  el('btnSimpleCertidoes').addEventListener('click', handleSimpleCertidoes);
-  el('btnSimplePrecatorio').addEventListener('click', handleSimplePrecatorio);
-  el('btnSimpleFontes').addEventListener('click', handleSimpleFontes);
+  const LINK_OFICIAL_POR_TRIBUNAL = {
+    TRF1: 'https://processual.trf1.jus.br/consultaProcessual/',
+    TRF2: 'https://www10.trf2.jus.br/consultas/precatorio-e-rpv/',
+    TRF3: 'https://web.trf3.jus.br/consultas/internet/consultareqpag',
+    TRF4: 'https://www.trf4.jus.br/',
+    TRF5: 'https://rpvprecatorio.trf5.jus.br/',
+    TRF6: 'https://portal.trf6.jus.br/rpv-e-precatorios/consulta-precatorio-e-rpv/',
+    STJ: 'https://www.cjf.jus.br/publico/rpvs_precatorios/',
+  };
+
+  function renderCnjResultado(data, cnjDigitado) {
+    const area = el('cnjResultArea');
+    if (!data.results || !data.results.length) {
+      let html = simpleMessage('Não encontramos esse processo no DataJud. Confira o número, ou tente novamente em alguns instantes.', 'info');
+      html += proximaAcaoBox('Confirme o número CNJ com 20 dígitos. Se estiver certo, o processo pode não estar indexado no DataJud ainda — tente o portal do tribunal diretamente.');
+      html += renderRegistroManualBox(cnjDigitado, '');
+      area.innerHTML = html;
+      ligarRegistroManual();
+      return;
+    }
+    const r = data.results[0];
+    const temIndicio = (r.precatorio_score || 0) >= 40;
+    let html = '<div class="stj-result-card">';
+    html += '<div class="stj-result-headline">' + (temIndicio ? '💰 Processo com indício de precatório/RPV' : '📄 Processo encontrado') + '</div>';
+    html += campoResultado('Número CNJ', formatCnj(r.numero_processo || cnjDigitado));
+    html += campoResultado('Tribunal', tribunalFriendlyName(r.tribunal));
+    html += campoResultado('Classe', r.classe);
+    html += campoResultado('Assunto', r.assunto);
+    html += campoResultado('Órgão julgador', r.orgao_julgador);
+    html += campoResultado('Última movimentação', r.ultima_atualizacao);
+    if (r.movimentos_relevantes && r.movimentos_relevantes.length) {
+      html += campoResultado('Movimentos relevantes', r.movimentos_relevantes.join('; '));
+    } else if (r.precatorio_flags && r.precatorio_flags.length) {
+      html += campoResultado('Indícios encontrados', r.precatorio_flags.join(', '));
+    }
+    html += campoResultado('Fonte', 'DataJud/CNJ (' + (data.provider_used || 'datajud') + ')');
+    html += campoResultado('Data da consulta', new Date().toLocaleString('pt-BR'));
+    html += '</div>';
+
+    const linkOficial = LINK_OFICIAL_POR_TRIBUNAL[(r.tribunal || '').toUpperCase()];
+    if (temIndicio) {
+      html += '<div class="indicio-precatorio-box">';
+      html += '<div class="titulo">Próxima etapa para confirmar precatório oficial</div>';
+      html += '<p style="margin:0 0 10px;">Há apenas indício processual. Para confirmar precatório, consulte ' + escapeHtml(tribunalFriendlyName(r.tribunal)) + '/CJF/SisPreq/LOA.</p>';
+      html += campoResultado('Fonte provável', tribunalFriendlyName(r.tribunal) + ' (precatório/RPV)');
+      html += campoResultado('Dados necessários', 'Número do processo, tribunal, e (se possível) número do requisitório/precatório');
+      html += '<div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">';
+      html += '<button class="cert-copy-btn" type="button" id="btnCopiarDadosCnj">Copiar dados para consulta</button>';
+      if (linkOficial) html += '<a class="cert-copy-btn" style="text-decoration:none; display:inline-block;" href="' + escapeHtml(linkOficial) + '" target="_blank" rel="noopener">Abrir fonte oficial →</a>';
+      html += '</div>';
+      html += '<div class="dados-faltantes-box" style="margin-top:12px;">Status: confirmação oficial ainda pendente — isto é indício processual, não confirmação de precatório/LOA.</div>';
+      html += '</div>';
+      html += proximaAcaoBox('Abra a fonte oficial acima com os dados copiados pra confirmar o precatório de verdade. Se não conseguir automaticamente, registre o que encontrar manualmente abaixo.');
+    } else {
+      html += proximaAcaoBox('Nenhum indício de precatório neste processo por enquanto. Se você já sabe o número do precatório/RPV, use "Localizar precatório/RPV" no menu principal.');
+    }
+    html += renderRegistroManualBox(r.numero_processo || cnjDigitado, tribunalFriendlyName(r.tribunal));
+    area.innerHTML = html;
+
+    const btnCopiar = el('btnCopiarDadosCnj');
+    if (btnCopiar) {
+      const textoCopia = 'CNJ: ' + formatCnj(r.numero_processo || cnjDigitado) + ' | Tribunal: ' + tribunalFriendlyName(r.tribunal);
+      btnCopiar.addEventListener('click', () => copiarTexto(textoCopia, btnCopiar));
+    }
+    ligarRegistroManual();
+  }
+
+  // ---------- Registro manual de evidência (reaproveitável em qualquer fluxo) ----------
+
+  function renderRegistroManualBox(referenciaSugerida, fonteSugerida) {
+    return '' +
+      '<div class="evidencia-box">' +
+      '<button class="secondary" type="button" id="btnAbrirRegistroManual" style="width:100%;">📎 Registrar resultado manual</button>' +
+      '<div id="formRegistroManual" style="display:none; margin-top:14px;">' +
+      '<label for="evFonte">Fonte consultada</label>' +
+      '<input type="text" id="evFonte" value="' + escapeHtml(fonteSugerida) + '" />' +
+      '<label for="evReferencia">Referência (CNJ/precatório/CPF)</label>' +
+      '<input type="text" id="evReferencia" value="' + escapeHtml(referenciaSugerida) + '" />' +
+      '<label for="evTexto">Texto encontrado (cole aqui)</label>' +
+      '<textarea id="evTexto" rows="4" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-family:inherit; font-size:15px;"></textarea>' +
+      '<label for="evArquivo" style="margin-top:10px;">Anexar PDF/XLSX/print <span class="hint">— opcional</span></label>' +
+      '<input type="file" id="evArquivo" accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg" />' +
+      '<button class="simple-button" type="button" id="btnSalvarEvidencia" style="margin-top:12px;">Salvar evidência</button>' +
+      '<div id="evidenciaStatus"></div>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function ligarRegistroManual() {
+    const btnAbrir = el('btnAbrirRegistroManual');
+    if (!btnAbrir) return;
+    btnAbrir.addEventListener('click', () => {
+      const form = el('formRegistroManual');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    });
+    el('btnSalvarEvidencia').addEventListener('click', async () => {
+      const fonte = el('evFonte').value.trim();
+      const referencia = el('evReferencia').value.trim();
+      const texto = el('evTexto').value.trim();
+      const arquivoInput = el('evArquivo');
+      const arquivo = arquivoInput.files[0];
+      if (!fonte) {
+        el('evidenciaStatus').innerHTML = simpleMessage('Diga qual fonte você consultou.', 'info');
+        return;
+      }
+      if (!texto && !arquivo) {
+        el('evidenciaStatus').innerHTML = simpleMessage('Cole o texto encontrado ou anexe um arquivo.', 'info');
+        return;
+      }
+      const formData = new FormData();
+      formData.append('fonte', fonte);
+      formData.append('referencia', referencia);
+      formData.append('texto', texto);
+      if (arquivo) formData.append('arquivo', arquivo);
+      el('evidenciaStatus').innerHTML = simpleLoading('Salvando...');
+      try {
+        await apiFetch('/api/evidencias', { method: 'POST', headers: buildHeaders(false), body: formData });
+        el('evidenciaStatus').innerHTML = simpleMessage('Evidência salva com sucesso.', 'success');
+        el('evTexto').value = '';
+        arquivoInput.value = '';
+      } catch (e) {
+        el('evidenciaStatus').innerHTML = simpleMessage('Não consegui salvar: ' + e.message, 'error');
+      }
+    });
+  }
+  el('btnCnjAnalisar').addEventListener('click', handleCnjAnalisar);
+  el('cnjInput').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') handleCnjAnalisar(); });
+
+  // ---------- Painel: Localizar precatório/RPV ----------
+
+  async function handlePrecatorioLocalizar() {
+    const tipo = el('precTipo').value;
+    const cnj = el('precCnj').value.trim();
+    const numero = el('precNumero').value.trim();
+    const sequencial = el('precSequencial').value.trim();
+    const searchKey = numero || sequencial || cnj;
+    if (!searchKey) {
+      el('precatorioResultArea').innerHTML = simpleMessage('Preencha ao menos um destes: CNJ, número do precatório/requisitório ou sequencial.', 'info');
+      return;
+    }
+    const extraParams = {};
+    if (el('precTribunal').value) extraParams.tribunal = el('precTribunal').value;
+    if (el('precAno').value.trim()) extraParams.ano_orcamento = /^\d+$/.test(el('precAno').value.trim()) ? Number(el('precAno').value.trim()) : el('precAno').value.trim();
+    if (el('precDocumento').value.trim()) extraParams.documento = el('precDocumento').value.trim();
+    if (el('precNome').value.trim()) extraParams.nome = el('precNome').value.trim();
+
+    el('precatorioResultArea').innerHTML = simpleLoading('Montando plano de busca...');
+    try {
+      const body = { search_type: tipo, search_key: searchKey, extra_params: extraParams };
+      const data = await apiFetch('/api/official-precatorio/plan', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
+      renderPlanoPrecatorio(data);
+    } catch (e) {
+      el('precatorioResultArea').innerHTML = simpleMessage('Não consegui montar o plano agora: ' + e.message, 'error');
+    }
+  }
+
+  function renderPlanoPrecatorio(data) {
+    const area = el('precatorioResultArea');
+    let html = '';
+
+    const faltando = data.missing_recommended_fields || [];
+    if (faltando.length) {
+      html += '<div class="dados-faltantes-box"><b>Pra um plano mais preciso, ainda faltam estes dados:</b><br>' + faltando.map((f) => '• ' + escapeHtml(f)).join('<br>') + '</div>';
+    }
+
+    const candidatos = data.candidate_sources || [];
+    const grupos = { disponivel: [], credencial: [], manual: [], nao_automatizado: [] };
+    candidatos.forEach((src) => {
+      const status = src.integration_status || '';
+      let grupo = 'nao_automatizado';
+      if (['implemented', 'implemented_partial', 'implemented_configurable'].includes(status)) grupo = 'disponivel';
+      else if (status.includes('credencial') || status.includes('credential')) grupo = 'credencial';
+      else if (src.captcha_expected === true || status === 'captcha_detected') grupo = 'manual';
+      grupos[grupo].push(src);
+    });
+
+    const titulos = {
+      disponivel: 'Fontes que já dá pra consultar agora',
+      credencial: 'Fontes que exigem credencial/convênio',
+      manual: 'Fontes que exigem consulta manual (captcha/portal)',
+      nao_automatizado: 'Fontes mapeadas, ainda não automatizadas',
+    };
+    Object.entries(titulos).forEach(([chave, titulo]) => {
+      if (!grupos[chave].length) return;
+      html += '<div class="plano-grupo"><div class="grupo-titulo">' + escapeHtml(titulo) + '</div>';
+      grupos[chave].forEach((src) => {
+        html += '<div class="plano-item ' + chave + '"><span>' + escapeHtml(src.name || src.key) + '</span>';
+        if (src.official_url) html += '<a href="' + escapeHtml(src.official_url) + '" target="_blank" rel="noopener">Abrir link oficial →</a>';
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+
+    if (!candidatos.length) {
+      html += simpleMessage('Nenhuma fonte encontrada pra esses dados ainda. Tente informar o tribunal.', 'info');
+    }
+
+    let proxima = 'Informe o número do precatório e o tribunal pra restringir a busca.';
+    if (grupos.disponivel.length) proxima = 'Comece pela fonte "' + (grupos.disponivel[0].name || '') + '", que já responde automaticamente.';
+    else if (faltando.length) proxima = 'Informe ' + faltando[0] + ' pra destravar mais fontes no plano.';
+    html += proximaAcaoBox(proxima);
+
+    area.innerHTML = html;
+  }
+  el('btnPrecatorioLocalizar').addEventListener('click', handlePrecatorioLocalizar);
 
   // ================= Certidões =================
 
@@ -1989,31 +2314,7 @@
     area.innerHTML = html;
   }
 
-  async function handleSimpleSearch() {
-    const key = el('simpleSearchKey').value.trim();
-    if (!key) {
-      el('simpleResultsArea').innerHTML = simpleMessage('Digite alguma coisa pra eu poder buscar — um nome, um CPF ou um número de processo.', 'info');
-      return;
-    }
-    el('simpleResultsArea').innerHTML = simpleLoading('Procurando, um instante...');
 
-    if (isDemo()) {
-      setTimeout(() => renderSimpleResult(demoDossier('auto', key)), 700);
-      return;
-    }
-    try {
-      const selectedType = el('simpleSearchType').value;
-      const apiSearchType = selectedType === 'stj_sequencial' ? 'precatorio' : selectedType;
-      const body = { provider: 'auto', search_type: apiSearchType, search_key: key, extra_params: buildSimpleExtraParams() };
-      const data = await apiFetch('/api/dossier', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
-      renderSimpleResult(data);
-    } catch (e) {
-      el('simpleResultsArea').innerHTML = simpleMessage('Não consegui buscar agora. Peça pra alguém checar a conexão do sistema.', 'error');
-    }
-  }
-
-  el('btnSimpleDossie').addEventListener('click', handleSimpleSearch);
-  el('simpleSearchKey').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') handleSimpleSearch(); });
 
   // ================= CERTIDÃO POR TRIBUNAL =================
 
@@ -2044,22 +2345,59 @@
     };
   }
 
-  function showSimpleCertPanel() {
-    el('simplePanel').style.display = 'none';
-    el('simpleResultsArea').innerHTML = '';
-    el('simpleCertPanel').style.display = 'block';
-    if (isDemo()) {
-      renderCertTribunalList(demoCertTribunais());
-    } else {
-      loadRealCertTribunais();
+  // UF -> chave do tribunal estadual de certidão correspondente (pra guiar
+  // automaticamente, sem o usuário ter que saber a sigla do próprio tribunal).
+  const UF_PARA_TRIBUNAL_CERTIDAO = {
+    AC: 'tjac_certidoes', AL: 'tjal_certidoes', AP: 'tjap_certidoes', AM: 'tjam_certidoes',
+    BA: 'tjba_certidoes', CE: 'tjce_certidoes', DF: 'tjdft_certidoes', ES: 'tjes_certidoes',
+    GO: 'tjgo_certidoes', MA: 'tjma_certidoes', MT: 'tjmt_certidoes', MS: 'tjms_certidoes',
+    MG: 'tjmg_certidoes', PA: 'tjpa_certidoes', PB: 'tjpb_certidoes', PR: 'tjpr_certidoes',
+    PE: 'tjpe_certidoes', PI: 'tjpi_certidoes', RJ: 'tjrj_certidoes', RN: 'tjrn_certidoes',
+    RS: 'tjrs_certidoes', RO: 'tjro_certidoes', RR: 'tjrr_certidoes', SC: 'tjsc_certidoes',
+    SP: 'tjsp_certidoes', SE: 'tjse_certidoes', TO: 'tjto_certidoes',
+  };
+
+  async function handleCertGuiarFonte() {
+    const uf = el('certUf').value;
+    const tipo = el('certTipoCertidao').value;
+    el('certGuiaResultado').innerHTML = simpleLoading('Buscando a fonte certa...');
+    try {
+      const data = await apiFetch('/api/certificates/sources', { method: 'GET', headers: buildHeaders(false) });
+      let fonteKey = null;
+      if (tipo === 'fiscal_cnd') fonteKey = 'serpro_consulta_cnd';
+      else if (tipo === 'trabalhista_cndt') fonteKey = 'tst_certidoes';
+      else if (uf) fonteKey = UF_PARA_TRIBUNAL_CERTIDAO[uf];
+
+      if (!fonteKey || !data.sources[fonteKey]) {
+        el('certGuiaResultado').innerHTML = simpleMessage('Selecione a UF (pra cível/criminal) ou o tipo certo, e tento de novo. Enquanto isso, veja a lista completa abaixo.', 'info');
+        loadRealCertTribunais();
+        return;
+      }
+      const fonte = data.sources[fonteKey];
+      let html = '<div class="stj-result-card">';
+      html += '<div class="stj-result-headline">' + escapeHtml(fonte.name) + '</div>';
+      html += campoResultado('Status', statusEmPortugues(fonte.integration_status));
+      html += campoResultado('Automatizada?', ['implemented', 'implemented_configurable', 'implemented_partial'].includes(fonte.integration_status) ? 'Parcialmente' : 'Não — emissão manual pelo link oficial');
+      if (fonte.accepted_inputs && fonte.accepted_inputs.length) {
+        html += campoResultado('Dados que essa fonte pede', fonte.accepted_inputs.join(', '));
+      }
+      html += '<div style="margin-top:10px;"><a class="cert-official-link" href="' + escapeHtml(fonte.official_url) + '" target="_blank" rel="noopener">Abrir site oficial →</a></div>';
+      html += '</div>';
+      html += proximaAcaoBox(
+        fonte.captcha_expected === true
+          ? 'Esta certidão tem captcha — faça manualmente pelo link oficial acima.'
+          : 'Preencha os dados na lista abaixo (toque no nome do tribunal) pra ver o formulário certo e preparar seu resumo pra copiar.'
+      );
+      el('certGuiaResultado').innerHTML = html;
+
+      // Também já abre o card certo na lista completa, pronto pra preencher.
+      const tribunaisFiltrados = { [fonteKey]: { name: fonte.name, official_url: fonte.official_url, accepted_inputs: fonte.accepted_inputs || [], confirmado: (fonte.accepted_inputs || []).length > 0 } };
+      renderCertTribunalList(tribunaisFiltrados);
+    } catch (e) {
+      el('certGuiaResultado').innerHTML = simpleMessage('Não consegui buscar agora: ' + e.message, 'error');
     }
   }
-  function hideSimpleCertPanel() {
-    el('simpleCertPanel').style.display = 'none';
-    el('certFieldsArea').innerHTML = '';
-    el('simplePanel').style.display = 'block';
-  }
-  el('linkCertVoltar').addEventListener('click', (ev) => { ev.preventDefault(); hideSimpleCertPanel(); });
+  el('btnCertGuiarFonte').addEventListener('click', handleCertGuiarFonte);
 
   async function loadRealCertTribunais() {
     el('certTribunalList').innerHTML = '<div class="simple-loading"><span class="spinner"></span>Carregando tribunais…</div>';
@@ -2152,13 +2490,10 @@
     el('certResumoArea').scrollIntoView({ behavior: 'smooth', block: 'end' });
   }
 
-  ['simpleSearchType', 'simpleSearchKey', 'simpleUf'].forEach((id) => el(id).addEventListener('input', () => renderInputGuide(el('simpleSearchType').value, 'simpleInputGuide', 'simpleFormatStatus', 'simpleSearchKey', 'simpleUf')));
   ['searchType', 'searchKey', 'uf'].forEach((id) => el(id).addEventListener('input', () => renderInputGuide(el('searchType').value, 'advancedInputGuide', 'advancedFormatStatus', 'searchKey', 'uf')));
-  ['simpleSearchType', 'simpleUf', 'searchType', 'uf'].forEach((id) => el(id).addEventListener('change', () => {
-    renderInputGuide(el('simpleSearchType').value, 'simpleInputGuide', 'simpleFormatStatus', 'simpleSearchKey', 'simpleUf');
+  ['searchType', 'uf'].forEach((id) => el(id).addEventListener('change', () => {
     renderInputGuide(el('searchType').value, 'advancedInputGuide', 'advancedFormatStatus', 'searchKey', 'uf');
   }));
-  renderInputGuide(el('simpleSearchType').value, 'simpleInputGuide', 'simpleFormatStatus', 'simpleSearchKey', 'simpleUf');
   renderInputGuide(el('searchType').value, 'advancedInputGuide', 'advancedFormatStatus', 'searchKey', 'uf');
 
   setMode(true); // Modo simples é o padrão ao abrir a tela.
