@@ -56,6 +56,7 @@ def test_summary_agrega_os_tres_registries():
     assert summary['total_precatorio_oficial'] == 66
     assert summary['total_certidoes'] == 34  # 26 TJs estaduais + TJDFT + 7 fontes fixas (Serpro/Regularize/CJF/STF/STJ/TST/TRT-base)
     assert summary['total_externo_comercial'] == 11
+    assert summary['total_sources'] == 66 + 34 + 11  # achado da auditoria: faltava esse total consolidado
     assert any('datajud_cnj' in e['source'] or 'judit_api' in e['source'] for e in summary['prontos_para_uso_agora'])
 
 
