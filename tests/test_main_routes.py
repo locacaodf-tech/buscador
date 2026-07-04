@@ -88,3 +88,37 @@ def test_comparacao_de_senha_e_constant_time(monkeypatch):
     source = inspect.getsource(main_module.login_submit)
     assert 'hmac.compare_digest' in source
     assert "password != settings.app_login_password" not in source
+
+
+def test_alerta_aparece_em_producao_sem_senha(monkeypatch):
+    """Achado real da auditoria: produção sem senha fica aberta pra qualquer
+    um com o link. Precisa de alerta visível na própria tela."""
+    import app.main as main_module
+    monkeypatch.setattr(main_module.settings, 'app_env', 'production')
+    monkeypatch.setattr(main_module.settings, 'app_login_password', '')
+
+    client = TestClient(app)
+    resp = client.get('/')
+    assert resp.status_code == 200
+    assert 'sem senha' in resp.text.lower()
+
+
+def test_alerta_nao_aparece_em_producao_com_senha(monkeypatch):
+    import app.main as main_module
+    monkeypatch.setattr(main_module.settings, 'app_env', 'production')
+    monkeypatch.setattr(main_module.settings, 'app_login_password', 'senha-forte-123')
+    monkeypatch.setattr(main_module, '_login_attempts', {})
+
+    client = TestClient(app)
+    resp = client.get('/login')
+    assert 'ferramenta está publicada sem senha' not in resp.text
+
+
+def test_alerta_nao_aparece_em_ambiente_local_sem_senha(monkeypatch):
+    import app.main as main_module
+    monkeypatch.setattr(main_module.settings, 'app_env', 'local')
+    monkeypatch.setattr(main_module.settings, 'app_login_password', '')
+
+    client = TestClient(app)
+    resp = client.get('/')
+    assert 'ferramenta está publicada sem senha' not in resp.text
