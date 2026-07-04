@@ -12,7 +12,7 @@ services:
       - key: DATABASE_URL
         value: sqlite:////data/buscador_processos.db
       - key: DATAJUD_API_KEY
-        sync: false
+        sync: false  # opcional: deixe em branco pra usar a chave publica oficial ja embutida em app/config.py
       - key: DATAJUD_BASE_URL
         value: https://api-publica.datajud.cnj.jus.br
       - key: JUDIT_ENABLED
