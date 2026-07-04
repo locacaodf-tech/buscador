@@ -79,3 +79,27 @@ class ManualEvidence(Base):
     texto: Mapped[str | None] = mapped_column(Text, nullable=True)  # texto colado pelo usuário
     arquivo_nome: Mapped[str | None] = mapped_column(String(255), nullable=True)
     arquivo_caminho: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class DiligenciaLog(Base):
+    """Cada chamada ao Motor Operacional de Diligência (POST /api/diligencia)
+    fica salva aqui — pra poder reabrir depois e virar dossiê, sem precisar
+    rodar tudo de novo. Guarda o resultado completo (JSON), não só um
+    resumo, porque o dossiê precisa de todo o detalhe."""
+
+    __tablename__ = 'diligencia_logs'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    input_original: Mapped[str] = mapped_column(String(500), nullable=False)
+    tipo_identificado: Mapped[str] = mapped_column(String(50), nullable=False)
+    valor_normalizado: Mapped[str] = mapped_column(String(500), nullable=False)
+    objetivo: Mapped[str] = mapped_column(String(30), nullable=False, default='completo')
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default='completed')
+    resumo_humano: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proxima_acao_recomendada: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resultados_confirmados: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    indicios: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    pendencias: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    fontes_manuais_recomendadas: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    raw_avancado: Mapped[dict | None] = mapped_column(JSON, nullable=True)
