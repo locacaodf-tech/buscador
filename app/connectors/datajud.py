@@ -5,9 +5,9 @@ from typing import Any
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from .base import BaseConnector, ProviderNotConfigured, SearchNotSupported, ConnectorError, ConnectorCapability
+from .base import BaseConnector, SearchNotSupported, ConnectorError, ConnectorCapability
 from .tribunal_registry import TRIBUNAL_ALIASES, normalize_tribunals, FEDERAL_TRIBUNALS, DEFAULT_PRECAT_TRIBUNALS
-from ..config import get_settings
+from ..config import get_settings, resolved_datajud_api_key
 from ..services.precatorio import build_precatorio_query
 from ..utils.cnj import normalize_cnj
 
@@ -40,11 +40,10 @@ class DataJudConnector(BaseConnector):
 
     def __init__(self):
         self.settings = get_settings()
-        if not self.settings.datajud_api_key:
-            raise ProviderNotConfigured('DATAJUD_API_KEY não configurada.')
+        self.api_key = resolved_datajud_api_key(self.settings)
         self.base_url = self.settings.datajud_base_url.rstrip('/')
         self.headers = {
-            'Authorization': f'APIKey {self.settings.datajud_api_key}',
+            'Authorization': f'APIKey {self.api_key}',
             'Content-Type': 'application/json',
         }
 
