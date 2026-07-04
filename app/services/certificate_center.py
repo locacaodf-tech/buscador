@@ -518,5 +518,5 @@ async def request_certificate(source_id: str, certificate_type: str, document: s
                 'message': f'{source.name}: fonte registrada no escopo mas ainda não pesquisada — capacidades, captcha e fluxo desconhecidos. Emita manualmente em {source.official_url} por enquanto.',
                 'fonte_url': source.official_url, 'consulted_at': consulted_at}
     return {'status': CertificateStatus.NAO_INTEGRADO,
-            'message': f'{source.name}: fonte mapeada, mas ainda não integrada ({source.notes[:180]}...). Emita manualmente em {source.official_url} por enquanto.',
+            'message': f'{source.name}: fonte mapeada, mas a emissão automática ainda não foi implementada. Emita manualmente em {source.official_url} por enquanto.',
             'fonte_url': source.official_url, 'consulted_at': consulted_at}
