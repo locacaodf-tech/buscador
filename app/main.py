@@ -21,7 +21,7 @@ from .services import source_master
 from .services import captcha_relay
 from .services import diligencia_engine
 from .services import manual_evidence
-from .models import CertificateRecord, ManualEvidence
+from .models import CertificateRecord, ManualEvidence, DiligenciaLog
 from .services.portal_automation import PORTAL_AUTOMATION_STUBS
 from .services.orchestrator import ProcessLookupOrchestrator, provider_capabilities
 from .connectors.tribunal_registry import ALL_TRIBUNALS, FEDERAL_TRIBUNALS, DEFAULT_PRECAT_TRIBUNALS
@@ -253,19 +253,93 @@ def official_precatorio_plan(request: OfficialPrecatorioPlanRequest):
 
 
 @app.post('/api/diligencia', dependencies=[Depends(verify_internal_token)])
-async def diligencia(request: DiligenciaRequest):
-    """Motor Operacional de Diligência (v28): ponto único de entrada — recebe
+async def diligencia(request: DiligenciaRequest, db: Session = Depends(get_db)):
+    """Motor Operacional de Diligência (v28/v29): ponto único de entrada — recebe
     qualquer dado digitado (CPF, CNPJ, nome, OAB, CNJ, sequencial STJ,
     precatório/RPV/requisitório) e devolve uma resposta humana e
     estruturada, orquestrando os serviços já existentes (DataJud, STJ XLSX,
     planejador de precatório, certidões). Funciona independente da tela —
-    qualquer cliente (a tela, um script, outra IA) pode chamar isto direto."""
-    return await diligencia_engine.run_diligencia(
+    qualquer cliente (a tela, um script, outra IA) pode chamar isto direto.
+    Cada chamada fica salva (DiligenciaLog) — dá pra reabrir depois em
+    /api/diligencias/{id} ou como dossiê em /api/diligencias/{id}/dossie."""
+    resultado = await diligencia_engine.run_diligencia(
         input_texto=request.input,
         uf=request.uf,
         tribunal=request.tribunal,
         objetivo=request.objetivo,
     )
+    log = DiligenciaLog(
+        input_original=request.input,
+        tipo_identificado=resultado['tipo_identificado'],
+        valor_normalizado=resultado['valor_normalizado'],
+        objetivo=request.objetivo,
+        status='completed',
+        resumo_humano=resultado.get('resumo_humano'),
+        proxima_acao_recomendada=resultado.get('proxima_acao_recomendada'),
+        resultados_confirmados=resultado.get('resultados_confirmados'),
+        indicios=resultado.get('indicios'),
+        pendencias=resultado.get('pendencias'),
+        fontes_manuais_recomendadas=resultado.get('fontes_manuais_recomendadas'),
+        raw_avancado=resultado.get('raw_avancado'),
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    resultado['diligencia_id'] = log.id
+    return resultado
+
+
+@app.get('/api/diligencias', dependencies=[Depends(verify_internal_token)])
+def listar_diligencias(limit: int = 50, db: Session = Depends(get_db)):
+    """Lista as últimas diligências salvas, mais recente primeiro."""
+    logs = db.query(DiligenciaLog).order_by(DiligenciaLog.created_at.desc()).limit(limit).all()
+    return [{
+        'id': l.id,
+        'created_at': l.created_at.isoformat(),
+        'input_original': l.input_original,
+        'tipo_identificado': l.tipo_identificado,
+        'valor_normalizado': l.valor_normalizado,
+        'resumo_humano': l.resumo_humano,
+        'proxima_acao_recomendada': l.proxima_acao_recomendada,
+    } for l in logs]
+
+
+def _diligencia_ou_404(diligencia_id: int, db: Session) -> DiligenciaLog:
+    log = db.query(DiligenciaLog).filter(DiligenciaLog.id == diligencia_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail=f'Diligência {diligencia_id} não encontrada.')
+    return log
+
+
+@app.get('/api/diligencias/{diligencia_id}', dependencies=[Depends(verify_internal_token)])
+def obter_diligencia(diligencia_id: int, db: Session = Depends(get_db)):
+    """Reabre uma diligência salva, com todo o detalhe (não só o resumo)."""
+    log = _diligencia_ou_404(diligencia_id, db)
+    return {
+        'id': log.id,
+        'created_at': log.created_at.isoformat(),
+        'input_original': log.input_original,
+        'tipo_identificado': log.tipo_identificado,
+        'valor_normalizado': log.valor_normalizado,
+        'objetivo': log.objetivo,
+        'status': log.status,
+        'resumo_humano': log.resumo_humano,
+        'proxima_acao_recomendada': log.proxima_acao_recomendada,
+        'resultados_confirmados': log.resultados_confirmados,
+        'indicios': log.indicios,
+        'pendencias': log.pendencias,
+        'fontes_manuais_recomendadas': log.fontes_manuais_recomendadas,
+        'raw_avancado': log.raw_avancado,
+    }
+
+
+@app.get('/api/diligencias/{diligencia_id}/dossie', response_class=HTMLResponse)
+def dossie_diligencia(diligencia_id: int, request: Request, db: Session = Depends(get_db)):
+    """Página HTML simples e imprimível do dossiê de uma diligência salva."""
+    if settings.app_login_password and not _has_valid_session(request):
+        return RedirectResponse(url='/login', status_code=303)
+    log = _diligencia_ou_404(diligencia_id, db)
+    return templates.TemplateResponse(request, 'dossie.html', {'log': log})
 
 
 @app.post('/api/dossier', dependencies=[Depends(verify_internal_token)])
