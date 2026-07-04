@@ -232,3 +232,20 @@ class PortalAutomationSolveRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     captcha_text: str
+
+
+class DiligenciaRequest(BaseModel):
+    """Requisição do Motor Operacional de Diligência (v28) — recebe
+    qualquer dado digitado, sem o cliente precisar saber qual endpoint/
+    conector usar."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    input: str
+    uf: str | None = None
+    tribunal: str | None = None
+    objetivo: Literal['completo', 'processo', 'precatorio', 'certidao'] = 'completo'
+
+    @field_validator('input', mode='before')
+    @classmethod
+    def strip_input(cls, value):
+        return value.strip() if isinstance(value, str) else value
