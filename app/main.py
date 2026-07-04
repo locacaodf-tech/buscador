@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hmac
+import time
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -15,7 +19,8 @@ from .services import stj_uploads
 from .services import certificate_center
 from .services import source_master
 from .services import captcha_relay
-from .models import CertificateRecord
+from .services import manual_evidence
+from .models import CertificateRecord, ManualEvidence
 from .services.portal_automation import PORTAL_AUTOMATION_STUBS
 from .services.orchestrator import ProcessLookupOrchestrator, provider_capabilities
 from .connectors.tribunal_registry import ALL_TRIBUNALS, FEDERAL_TRIBUNALS, DEFAULT_PRECAT_TRIBUNALS
@@ -23,7 +28,15 @@ from .services.official_precatorio_sources import official_precatorio_sources, o
 from .models import SearchLog, ProcessResult
 
 settings = get_settings()
-app = FastAPI(title='Claude Buscador de Processos', version='0.1.0')
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title='Claude Buscador de Processos', version='0.1.0', lifespan=lifespan)
 
 # CORS: só libera cross-origin para as origens explicitamente listadas em
 # FRONTEND_ALLOWED_ORIGINS. Nunca usa "*". Se a variável estiver vazia,
@@ -39,11 +52,6 @@ app.add_middleware(
 
 app.mount('/static', StaticFiles(directory='app/static'), name='static')
 templates = Jinja2Templates(directory='app/templates')
-
-
-@app.on_event('startup')
-def on_startup():
-    init_db()
 
 
 def _has_valid_session(request: Request) -> bool:
@@ -64,7 +72,7 @@ def verify_internal_token(request: Request, x_internal_token: str | None = Heade
     """
     if not settings.internal_api_token and not settings.app_login_password:
         return
-    if settings.internal_api_token and x_internal_token == settings.internal_api_token:
+    if settings.internal_api_token and hmac.compare_digest(x_internal_token or '', settings.internal_api_token):
         return
     if _has_valid_session(request):
         return
@@ -75,8 +83,7 @@ def verify_internal_token(request: Request, x_internal_token: str | None = Heade
 def index(request: Request):
     if settings.app_login_password and not _has_valid_session(request):
         return RedirectResponse(url='/login', status_code=303)
-    return templates.TemplateResponse('index.html', {
-        'request': request,
+    return templates.TemplateResponse(request, 'index.html', {
         'all_tribunals': ALL_TRIBUNALS,
         'federal_tribunals': FEDERAL_TRIBUNALS,
         'default_precat_tribunals': DEFAULT_PRECAT_TRIBUNALS,
@@ -88,17 +95,50 @@ def index(request: Request):
 def login_form(request: Request):
     if not settings.app_login_password or _has_valid_session(request):
         return RedirectResponse(url='/', status_code=303)
-    return templates.TemplateResponse('login.html', {'request': request, 'error': None})
+    return templates.TemplateResponse(request, 'login.html', {'error': None})
+
+
+# Rate limit simples de tentativas de login: em memória, por IP. Suficiente
+# pra uma ferramenta interna com um único usuário/senha compartilhada — não
+# substitui um WAF de verdade, mas impede força bruta trivial via script.
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 15 * 60
+_login_attempts: dict[str, list[float]] = {}
+
+
+def _login_rate_limited(client_ip: str) -> bool:
+    now = time.time()
+    attempts = [t for t in _login_attempts.get(client_ip, []) if now - t < LOGIN_WINDOW_SECONDS]
+    _login_attempts[client_ip] = attempts
+    return len(attempts) >= LOGIN_MAX_ATTEMPTS
+
+
+def _register_login_failure(client_ip: str) -> None:
+    _login_attempts.setdefault(client_ip, []).append(time.time())
 
 
 @app.post('/login', response_class=HTMLResponse)
 def login_submit(request: Request, password: str = Form(...)):
     if not settings.app_login_password:
         return RedirectResponse(url='/', status_code=303)
-    if password != settings.app_login_password:
+
+    client_ip = request.client.host if request.client else 'unknown'
+    if _login_rate_limited(client_ip):
         return templates.TemplateResponse(
+            request,
             'login.html',
-            {'request': request, 'error': 'Senha incorreta.'},
+            {'error': f'Muitas tentativas. Aguarde {LOGIN_WINDOW_SECONDS // 60} minutos e tente de novo.'},
+            status_code=429,
+        )
+
+    # Comparação constant-time: evita que diferenças no tempo de resposta
+    # revelem quantos caracteres da senha estão certos (ataque de timing).
+    if not hmac.compare_digest(password, settings.app_login_password):
+        _register_login_failure(client_ip)
+        return templates.TemplateResponse(
+            request,
+            'login.html',
+            {'error': 'Senha incorreta.'},
             status_code=401,
         )
     token_ttl_seconds = 60 * 60 * 24 * max(1, settings.session_ttl_days)
@@ -358,6 +398,66 @@ def certificate_get(certificate_id: int, db: Session = Depends(get_db)):
         'valid_until': record.valid_until,
         'raw': record.raw,
     }
+
+
+@app.post('/api/evidencias', dependencies=[Depends(verify_internal_token)])
+async def registrar_evidencia_manual(
+    fonte: str = Form(...),
+    referencia: str = Form(''),
+    texto: str = Form(''),
+    arquivo: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    """Registro manual de evidência: quando uma fonte ainda não é
+    automatizada, o usuário pode colar o texto que encontrou e/ou anexar
+    um arquivo (PDF/XLSX/print), e isso fica guardado — nunca inventado."""
+    arquivo_nome = None
+    arquivo_caminho = None
+    if arquivo is not None and arquivo.filename:
+        content = await arquivo.read()
+        try:
+            arquivo_nome, arquivo_caminho = manual_evidence.save_evidence_file(arquivo.filename, content)
+        except manual_evidence.InvalidEvidenceFile as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    if not texto.strip() and not arquivo_nome:
+        raise HTTPException(status_code=400, detail='Informe o texto encontrado ou anexe um arquivo — não dá pra salvar uma evidência vazia.')
+
+    registro = ManualEvidence(
+        fonte=fonte,
+        referencia=referencia or None,
+        texto=texto or None,
+        arquivo_nome=arquivo_nome,
+        arquivo_caminho=arquivo_caminho,
+    )
+    db.add(registro)
+    db.commit()
+    db.refresh(registro)
+    return {
+        'id': registro.id,
+        'created_at': registro.created_at.isoformat(),
+        'fonte': registro.fonte,
+        'referencia': registro.referencia,
+        'tem_texto': bool(registro.texto),
+        'arquivo_nome': registro.arquivo_nome,
+        'status': 'salvo',
+    }
+
+
+@app.get('/api/evidencias', dependencies=[Depends(verify_internal_token)])
+def listar_evidencias_manuais(referencia: str | None = None, limit: int = 50, db: Session = Depends(get_db)):
+    query = db.query(ManualEvidence).order_by(ManualEvidence.created_at.desc())
+    if referencia:
+        query = query.filter(ManualEvidence.referencia == referencia)
+    registros = query.limit(limit).all()
+    return [{
+        'id': r.id,
+        'created_at': r.created_at.isoformat(),
+        'fonte': r.fonte,
+        'referencia': r.referencia,
+        'texto': r.texto,
+        'arquivo_nome': r.arquivo_nome,
+    } for r in registros]
 
 
 @app.get('/api/history', dependencies=[Depends(verify_internal_token)])
