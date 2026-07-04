@@ -497,6 +497,12 @@
 </style>
 <body>
 
+{% if alerta_producao_sem_senha %}
+<div style="background:#dc2626; color:#fff; padding:14px 18px; text-align:center; font-size:15px; font-weight:700;">
+  ⚠️ Esta ferramenta está publicada sem senha (APP_LOGIN_PASSWORD vazio). Qualquer pessoa com o link acessa seus dados. Configure uma senha no Render o quanto antes.
+</div>
+{% endif %}
+
 <header class="top">
   <div class="inner">
     <div>
