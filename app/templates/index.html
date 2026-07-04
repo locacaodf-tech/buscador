@@ -1929,6 +1929,15 @@
     not_researched: 'Fonte ainda não pesquisada em detalhe — use o link oficial se precisar agora.',
     nao_integrado: 'Fonte mapeada, mas ainda não automatizada. Use o link oficial abaixo.',
     requer_api_contratada: 'Exige contrato de API pago — emissão manual grátis disponível no link oficial.',
+    negativa: '✅ Certidão negativa — nada consta.',
+    positiva: 'Certidão positiva — consta pendência.',
+    positiva_efeito_negativa: 'Certidão positiva com efeito de negativa.',
+    pendente: 'Solicitação pendente — aguardando processamento.',
+    erro: 'Não foi possível processar agora. Confira os dados ou tente de novo.',
+    requer_manual: 'Esta fonte exige emissão manual pelo link oficial.',
+    requer_login: 'Esta fonte exige login — use o link oficial.',
+    requer_certificado_digital: 'Esta fonte exige certificado digital — use o link oficial.',
+    captcha_detectado: 'Esta fonte tem captcha — só dá pra fazer manualmente pelo link oficial.',
   };
   function statusEmPortugues(status) {
     return STATUS_EM_PORTUGUES[status] || 'Status não automatizado — confira o link oficial.';
@@ -2266,7 +2275,7 @@
 
   function renderCertResult(data) {
     const cls = (data.status === 'negativa' || data.status === 'positiva') ? 'success-bg' : '';
-    let html = '<div class="cert-result-box"><div class="status-line">' + escapeHtml(data.status || '—') + '</div>';
+    let html = '<div class="cert-result-box"><div class="status-line">' + escapeHtml(statusEmPortugues(data.status)) + '</div>';
     html += '<div>' + escapeHtml(data.message || '') + '</div>';
     if (data.fonte_url) html += '<div style="margin-top:8px;font-size:12px;"><a href="' + escapeHtml(data.fonte_url) + '" target="_blank" rel="noopener">' + escapeHtml(data.fonte_url) + '</a></div>';
     if (data.consulted_at) html += '<div style="margin-top:4px;font-size:11.5px;color:var(--ink-soft);">Consultado em: ' + escapeHtml(new Date(data.consulted_at).toLocaleString('pt-BR')) + '</div>';
