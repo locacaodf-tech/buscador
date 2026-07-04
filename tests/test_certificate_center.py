@@ -190,3 +190,19 @@ def test_tjpe_pede_titulo_eleitor_tjsp_pede_naturalidade():
     assert 'naturalidade' in tjsp.accepted_inputs
     assert 'titulo_eleitor' not in tjmg.accepted_inputs
     assert len(tjmg.accepted_inputs) < len(tjsp.accepted_inputs)  # TJMG pede bem menos campos que TJSP
+
+
+def test_mensagem_de_fonte_nao_integrada_nunca_vaza_nota_de_pesquisa_interna():
+    """Bug real reportado pelo usuário (print de tela): a mensagem incluía os
+    primeiros 180 caracteres de source.notes cru, o que vazou anotação de
+    pesquisa interna ('MELHOR ALVO REAL PARA O captcha_relay.py...') direto
+    pra tela do usuário. A mensagem agora é genérica e nunca usa source.notes."""
+    import asyncio
+    resultado = asyncio.run(request_certificate('tjpe_certidoes', 'civel', '25683919000158', None))
+    assert 'captcha_relay' not in resultado['message']
+    assert 'MELHOR ALVO' not in resultado['message']
+    assert resultado['message'] == (
+        'TJPE - Certidões cível/criminal: fonte mapeada, mas a emissão automática '
+        'ainda não foi implementada. Emita manualmente em '
+        'https://certidoesunificadas.app.tjpe.jus.br/ por enquanto.'
+    )
