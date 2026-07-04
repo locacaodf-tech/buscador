@@ -88,6 +88,10 @@ def index(request: Request):
         'federal_tribunals': FEDERAL_TRIBUNALS,
         'default_precat_tribunals': DEFAULT_PRECAT_TRIBUNALS,
         'login_enabled': bool(settings.app_login_password),
+        # Achado real da auditoria: em produção sem senha, a ferramenta fica
+        # aberta pra qualquer um com o link. Isso avisa na própria tela,
+        # visível toda vez, em vez de só um log que ninguém vê.
+        'alerta_producao_sem_senha': settings.app_env not in ('local', 'development', 'dev', 'test') and not settings.app_login_password,
     })
 
 
