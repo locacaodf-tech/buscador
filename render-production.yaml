@@ -33,6 +33,8 @@ services:
         sync: false
       - key: STJ_UPLOAD_DIR
         value: /data/stj_uploads
+      - key: EVIDENCE_UPLOAD_DIR
+        value: /data/evidencias_manuais
       - key: SESSION_TTL_DAYS
         value: 90
     disk:
