@@ -16,7 +16,9 @@ init_db()
 
 
 def _client(tmp_path, monkeypatch):
-    monkeypatch.setattr(manual_evidence, 'EVIDENCE_DIR', tmp_path / 'evidencias_manuais')
+    isolado = tmp_path / 'evidencias_manuais'
+    monkeypatch.setattr(manual_evidence, 'EVIDENCE_DIR', isolado)
+    monkeypatch.setattr(manual_evidence, 'evidence_dir', lambda: isolado)
     return TestClient(app)
 
 
@@ -76,7 +78,9 @@ def test_listar_evidencias_filtra_por_referencia(tmp_path, monkeypatch):
 
 
 def test_sanitiza_nome_de_arquivo_perigoso(tmp_path, monkeypatch):
-    monkeypatch.setattr(manual_evidence, 'EVIDENCE_DIR', tmp_path / 'evidencias_manuais')
+    isolado = tmp_path / 'evidencias_manuais'
+    monkeypatch.setattr(manual_evidence, 'EVIDENCE_DIR', isolado)
+    monkeypatch.setattr(manual_evidence, 'evidence_dir', lambda: isolado)
     nome, caminho = manual_evidence.save_evidence_file('../../etc/passwd.pdf', b'conteudo')
     assert '..' not in caminho
     assert (tmp_path / 'evidencias_manuais').resolve() in __import__('pathlib').Path(caminho).resolve().parents
