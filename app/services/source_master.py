@@ -166,7 +166,11 @@ EXTERNAL_SOURCE_REGISTRY: dict[str, ExternalSource] = {
 
 
 def external_sources() -> dict[str, dict[str, Any]]:
-    return {k: v.as_dict() for k, v in EXTERNAL_SOURCE_REGISTRY.items()}
+    sources = {k: v.as_dict() for k, v in EXTERNAL_SOURCE_REGISTRY.items()}
+    if 'datajud_cnj' in sources:
+        from ..config import datajud_key_source
+        sources['datajud_cnj']['chave_em_uso'] = datajud_key_source()  # 'configurado_pelo_usuario' ou 'chave_publica_padrao' — nunca o valor
+    return sources
 
 
 def master_sources_summary() -> dict[str, Any]:
