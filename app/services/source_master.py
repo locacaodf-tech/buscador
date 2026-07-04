@@ -205,6 +205,7 @@ def master_sources_summary() -> dict[str, Any]:
                 needs_browser_automation.append(entry)
 
     return {
+        'total_sources': precat_summary['total_sources'] + len(cert_sources) + len(ext_sources),
         'total_precatorio_oficial': precat_summary['total_sources'],
         'total_certidoes': len(cert_sources),
         'total_externo_comercial': len(ext_sources),
