@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import DateTime, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base
@@ -8,7 +8,7 @@ class SearchLog(Base):
     __tablename__ = 'search_logs'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     search_type: Mapped[str] = mapped_column(String(50), nullable=False)
     search_key_masked: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -23,7 +23,7 @@ class ProcessResult(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     search_log_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     tribunal: Mapped[str | None] = mapped_column(String(50), nullable=True)
     numero_processo: Mapped[str | None] = mapped_column(String(50), index=True, nullable=True)
@@ -48,7 +48,7 @@ class CertificateRecord(Base):
     __tablename__ = 'certificate_records'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     source_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     certificate_type: Mapped[str] = mapped_column(String(50), nullable=False)  # civel, criminal, fiscal_cnd, eleitoral...
     document_masked: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -61,3 +61,21 @@ class CertificateRecord(Base):
     issued_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
     valid_until: Mapped[str | None] = mapped_column(String(50), nullable=True)
     raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class ManualEvidence(Base):
+    """Registro manual de evidência — pra quando uma fonte ainda não é
+    automatizada, mas o usuário já conseguiu a informação manualmente
+    (copiou texto do portal, anexou PDF/print/XLSX) e quer guardar isso
+    junto do resto do dossiê. Não inventa dado nenhum: é só um cofre pro
+    que o próprio usuário coletou e confirma que é real."""
+
+    __tablename__ = 'manual_evidences'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    fonte: Mapped[str] = mapped_column(String(255), nullable=False)  # nome da fonte/tribunal/site consultado manualmente
+    referencia: Mapped[str | None] = mapped_column(String(255), nullable=True)  # CNJ/CPF/precatório relacionado, se houver
+    texto: Mapped[str | None] = mapped_column(Text, nullable=True)  # texto colado pelo usuário
+    arquivo_nome: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    arquivo_caminho: Mapped[str | None] = mapped_column(String(500), nullable=True)
