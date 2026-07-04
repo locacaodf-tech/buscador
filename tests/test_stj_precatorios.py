@@ -9,6 +9,7 @@ from app.connectors.stj_precatorios import (
     discover_file_links,
     find_header_row,
     infer_file_metadata,
+    match_records,
     parse_stj_sheet,
     parse_workbook_bytes,
     _parse_valor,
@@ -207,3 +208,65 @@ def test_valores_ficticios_do_incidente_nunca_aparecem_em_resultado_real(monkeyp
     dump = str(result)
     for proibido in ['OF-2027/004521', 'PRC-2027/0089341', '187452.36', '187.452', "'posicao_fila': 1542"]:
         assert proibido not in dump, f'valor fictício do incidente vazou para resultado real: {proibido}'
+
+
+# ---------------------------------------------------------------------------
+# Busca por nome do credor — feature real, sem depender de Judit/provedor
+# pago: se a planilha do STJ tiver coluna de credor/beneficiário, dá pra
+# achar o precatório pelo nome, gratuitamente, nos dados que o próprio
+# usuário já carregou.
+# ---------------------------------------------------------------------------
+
+def _registros_com_credor():
+    return [
+        {'sequencial': '15547', 'numero_processo': '05066715120253000000', 'credor_nome': 'MARIA DA SILVA SOUZA', 'valor': 1708161.78},
+        {'sequencial': '15548', 'numero_processo': '05066725120253000000', 'credor_nome': 'JOÃO PEREIRA SANTOS', 'valor': 95000.0},
+    ]
+
+
+def test_busca_por_nome_encontra_parcial_minusculo_sem_acento():
+    registros = _registros_com_credor()
+    resultado = match_records(registros, 'name', 'maria da silva')
+    assert len(resultado) == 1
+    assert resultado[0]['sequencial'] == '15547'
+
+
+def test_busca_por_nome_e_case_e_accent_insensitive():
+    registros = _registros_com_credor()
+    resultado = match_records(registros, 'name', 'JOÃO PEREIRA')
+    assert len(resultado) == 1
+    assert resultado[0]['sequencial'] == '15548'
+
+    resultado2 = match_records(registros, 'name', 'joao pereira')  # sem acento, minusculo
+    assert len(resultado2) == 1
+    assert resultado2[0]['sequencial'] == '15548'
+
+
+def test_busca_por_nome_sem_correspondencia_devolve_vazio():
+    registros = _registros_com_credor()
+    resultado = match_records(registros, 'name', 'FULANO INEXISTENTE')
+    assert resultado == []
+
+
+def test_busca_por_nome_ignora_registro_sem_coluna_credor():
+    registros = [{'sequencial': '999', 'numero_processo': '123', 'credor_nome': None}]
+    resultado = match_records(registros, 'name', 'qualquer nome')
+    assert resultado == []
+
+
+def test_credor_nome_e_detectado_de_planilha_real_com_essa_coluna():
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'PRCs'
+    ws.append(['Relação de Precatórios Expedidos - STJ'])
+    ws.append([])
+    ws.append(['Ordem', 'Classe', 'Sequencial', 'Processo', 'Credor/Beneficiário', 'Valor', 'Previsão'])
+    ws.append([1, 'PRC', 15547, '0506671-51.2025.3.00.0000', 'MARIA DA SILVA SOUZA', '1.708.161,78', 'fevereiro/2026'])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    meta = infer_file_metadata('teste.xlsx')
+    records = parse_workbook_bytes(buf.getvalue(), meta, 'upload:teste.xlsx')
+    assert len(records) == 1
+    assert records[0]['credor_nome'] == 'MARIA DA SILVA SOUZA'
