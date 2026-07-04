@@ -1780,6 +1780,11 @@
   function mostrarPainel(idParaMostrar) {
     PAINEIS.forEach((id) => { el(id).style.display = (id === idParaMostrar) ? 'block' : 'none'; });
     el('simpleResultsArea').innerHTML = '';
+    // cnjResultArea e buscaLivreResultado reusam os mesmos ids internos
+    // (evFonte, evTexto...) na caixa de registro manual — limpar o que não
+    // está ativo evita dois elementos com o mesmo id no DOM ao mesmo tempo.
+    if (idParaMostrar !== 'panelCnj' && el('cnjResultArea')) el('cnjResultArea').innerHTML = '';
+    if (idParaMostrar !== 'simplePanel' && el('buscaLivreResultado')) el('buscaLivreResultado').innerHTML = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   document.querySelectorAll('[data-voltar]').forEach((link) => {
@@ -1822,90 +1827,82 @@
       el('buscaLivreResultado').innerHTML = simpleMessage('Digite algum dado — CPF, CNJ, nome, OAB, precatório...', 'info');
       return;
     }
-    const tipoInferido = inferType(raw);
-    const normalizado = normalizeSearchValue(tipoInferido, raw, null);
-    const valor = normalizado.value || raw;
-
-    if (tipoInferido === 'cnj') {
-      el('buscaLivreResultado').innerHTML = simpleMessage('Identifiquei um número CNJ. Levando pra análise de processo...', 'info');
-      mostrarPainel('panelCnj');
-      el('cnjInput').value = valor;
-      handleCnjAnalisar();
-      return;
-    }
-    if (looksLikeStjSequencial(raw)) {
-      el('buscaLivreResultado').innerHTML = simpleMessage('Pode ser um sequencial do STJ. Levando pra tela do STJ — se ainda não subiu o XLSX oficial, suba primeiro.', 'info');
-      setMode(false);
-      switchTab('stj');
-      setTimeout(() => { const c = el('stjSearchKey'); if (c) c.value = valor; }, 200);
-      return;
-    }
-    if (tipoInferido === 'name') {
-      await buscaLivreNome(valor);
-      return;
-    }
-    if (['cpf', 'cnpj', 'oab'].includes(tipoInferido)) {
-      buscaLivreSemFonteAutomatica(tipoInferido, valor);
-      return;
-    }
-    // Não deu pra identificar com confiança — trata como possível precatório/RPV/requisitório.
-    el('buscaLivreResultado').innerHTML = simpleMessage('Não identifiquei um formato específico. Levando pra "Localizar precatório/RPV" com esse valor preenchido.', 'info');
-    mostrarPainel('panelPrecatorioRpv');
-    el('precNumero').value = valor;
-  }
-
-  function looksLikeStjSequencial(raw) {
-    const digitos = digitsOnly(raw);
-    return digitos.length >= 3 && digitos.length <= 8 && digitos === raw.trim();
-  }
-
-  async function buscaLivreNome(nome) {
-    el('buscaLivreResultado').innerHTML = simpleLoading('Buscando "' + nome + '" nos arquivos do STJ já carregados...');
+    el('buscaLivreResultado').innerHTML = simpleLoading('Fazendo a diligência...');
     try {
-      const body = { search_type: 'name', search_key: nome };
-      const data = await apiFetch('/api/stj-precatorios/search', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
-      if (data.status === 'not_loaded') {
-        let html = simpleMessage('Nome identificado. Mas nenhum arquivo do STJ foi carregado ainda — sem arquivo, não dá pra buscar por nome de verdade.', 'info');
-        html += '<button class="simple-button" type="button" id="btnIrParaStjUpload" style="margin-top:12px;">Ir para upload do STJ</button>';
-        html += proximaAcaoBox('Carregue o XLSX oficial do STJ na tela do STJ, depois volte e busque esse nome de novo.');
-        el('buscaLivreResultado').innerHTML = html;
-        el('btnIrParaStjUpload').addEventListener('click', () => { setMode(false); switchTab('stj'); });
-        return;
-      }
-      if (!data.results || !data.results.length) {
-        el('buscaLivreResultado').innerHTML = simpleMessage('Não achei "' + nome + '" nos arquivos do STJ já carregados. Confira a grafia, ou pode ser que essa pessoa não esteja nesse arquivo específico.', 'info')
-          + proximaAcaoBox('Se souber o CNJ ou número do precatório dessa pessoa, tente por esse dado em vez do nome.');
-        return;
-      }
-      let html = '';
-      data.results.forEach((r) => {
+      const body = { input: raw, objetivo: 'completo' };
+      const data = await apiFetch('/api/diligencia', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
+      renderDiligenciaResultado(data, raw);
+    } catch (e) {
+      el('buscaLivreResultado').innerHTML = simpleMessage('Não consegui fazer a diligência agora: ' + e.message, 'error');
+    }
+  }
+
+  function renderDiligenciaResultado(data, entradaOriginal) {
+    let html = '<div class="stj-result-card">';
+    html += campoResultado('Tipo identificado', data.tipo_identificado);
+    html += campoResultado('Valor', data.valor_normalizado);
+    html += '</div>';
+
+    if (data.consultas_realizadas && data.consultas_realizadas.length) {
+      html += '<div class="plano-grupo"><div class="grupo-titulo">Etapas executadas</div>';
+      data.consultas_realizadas.forEach((etapa) => {
+        const cls = etapa.status === 'concluido' ? 'disponivel' : (etapa.status === 'falhou' ? 'credencial' : 'nao_automatizado');
+        html += '<div class="plano-item ' + cls + '"><span>' + escapeHtml(etapa.nome) + '</span><span style="font-size:13px;">' + escapeHtml(etapa.detalhe || etapa.status) + '</span></div>';
+      });
+      html += '</div>';
+    }
+
+    if (data.resultados_confirmados && data.resultados_confirmados.length) {
+      data.resultados_confirmados.forEach((r) => {
         html += '<div class="stj-result-card">';
-        html += '<div class="stj-result-headline">💰 ' + escapeHtml(r.credor_nome || nome) + '</div>';
-        html += campoResultado('Sequencial', r.sequencial);
-        html += campoResultado('Processo', formatCnj(r.numero_processo));
-        html += campoResultado('Valor', formatCurrencyStj(r.valor));
-        html += campoResultado('Previsão', r.previsao_pagamento);
-        html += campoResultado('Arquivo', r.arquivo_original);
-        html += campoResultado('Fonte', r.fonte);
+        html += '<div class="stj-result-headline">✅ Confirmado</div>';
+        Object.entries(r).forEach(([chave, val]) => { if (val != null && val !== '') html += campoResultado(chave, val); });
         html += '</div>';
       });
-      html += proximaAcaoBox('Achado nos dados reais do STJ que você já carregou — sem depender de nenhum provedor pago.');
-      el('buscaLivreResultado').innerHTML = html;
-    } catch (e) {
-      el('buscaLivreResultado').innerHTML = simpleMessage('Não consegui buscar agora: ' + e.message, 'error');
     }
+
+    if (data.indicios && data.indicios.length) {
+      data.indicios.forEach((ind) => {
+        html += '<div class="indicio-precatorio-box">';
+        html += '<div class="titulo">Próxima etapa para confirmar precatório oficial</div>';
+        html += campoResultado('Descrição', ind.descricao);
+        html += campoResultado('Fonte provável', ind.fonte_provavel);
+        html += '<div class="dados-faltantes-box" style="margin-top:10px;">Status: confirmação oficial ainda pendente.</div>';
+        html += '</div>';
+      });
+    }
+
+    if (data.pendencias && data.pendencias.length) {
+      html += '<div class="dados-faltantes-box"><b>Pendências:</b><br>' + data.pendencias.map((p) => '• ' + escapeHtml(p)).join('<br>') + '</div>';
+    }
+
+    if (data.fontes_manuais_recomendadas && data.fontes_manuais_recomendadas.length) {
+      html += '<div class="plano-grupo"><div class="grupo-titulo">Fontes manuais recomendadas</div>';
+      data.fontes_manuais_recomendadas.forEach((f) => {
+        html += '<div class="plano-item manual"><span>' + escapeHtml(f.fonte) + '</span><span style="font-size:13px;">' + escapeHtml(f.acao || '') + '</span></div>';
+      });
+      html += '</div>';
+    }
+
+    html += proximaAcaoBox(data.proxima_acao_recomendada || '');
+
+    const precisaSubirStj = (data.pendencias || []).some((p) => p.toLowerCase().includes('xlsx'));
+    if (precisaSubirStj) {
+      html += '<button class="simple-button" type="button" id="btnDiligenciaIrParaStj" style="margin-top:12px;">Ir para upload STJ</button>';
+    }
+
+    html += renderRegistroManualBox(entradaOriginal, data.tipo_identificado);
+
+    html += '<details style="margin-top:18px;"><summary style="cursor:pointer; font-size:14px; color:var(--ink-soft);">Ver JSON avançado</summary>';
+    html += '<pre style="white-space:pre-wrap; font-size:12px; background:var(--paper-muted); padding:12px; border-radius:8px; margin-top:8px;">' + escapeHtml(JSON.stringify(data.raw_avancado, null, 2)) + '</pre></details>';
+
+    el('buscaLivreResultado').innerHTML = html;
+
+    const btnStj = el('btnDiligenciaIrParaStj');
+    if (btnStj) btnStj.addEventListener('click', () => { setMode(false); switchTab('stj'); });
+    ligarRegistroManual();
   }
 
-  function buscaLivreSemFonteAutomatica(tipo, valor) {
-    const rotuloTipo = { cpf: 'CPF', cnpj: 'CNPJ', oab: 'OAB' }[tipo];
-    let html = '<div class="stj-result-card">';
-    html += campoResultado('Tipo identificado', rotuloTipo);
-    html += campoResultado('Valor normalizado', valor);
-    html += '</div>';
-    html += '<div class="dados-faltantes-box">Não há hoje uma fonte gratuita pra buscar processo por ' + rotuloTipo + ' isolado, sem mais nenhum dado — isso normalmente dependeria de um provedor pago de terceiros.</div>';
-    html += proximaAcaoBox('Se você já sabe o CNJ, o número do precatório, ou o nome da pessoa, tente por um desses — o nome já busca de graça nos dados do STJ que você carregou. Se conseguir esse dado por fora, registre com "Registrar resultado manual" no fluxo de CNJ.');
-    el('buscaLivreResultado').innerHTML = html;
-  }
   el('btnBuscaLivre').addEventListener('click', handleBuscaLivre);
   el('buscaLivreInput').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') handleBuscaLivre(); });
 
