@@ -9,6 +9,16 @@ class Settings(BaseSettings):
     app_secret: str = 'troque-esta-chave'
     database_url: str = 'sqlite:///./buscador_processos.db'
 
+    # Chave pública oficial do DataJud/CNJ — confirmada ao vivo na wiki oficial
+    # (datajud-wiki.cnj.jus.br/api-publica/acesso) em 04/07/2026. NÃO é segredo:
+    # é a MESMA chave publicada pelo CNJ pra qualquer pessoa usar, documentada
+    # oficialmente. O CNJ pode rotacionar essa chave a qualquer momento — se a
+    # busca por CNJ começar a falhar com erro de autenticação, confira o valor
+    # atual na wiki e sobrescreva via variável de ambiente DATAJUD_API_KEY.
+    # Valor que o usuário configurou explicitamente via variável de ambiente
+    # DATAJUD_API_KEY. Fica vazio por padrão — quem decide se usa a chave
+    # pública padrão ou uma própria é a função resolved_datajud_api_key()
+    # abaixo, nunca este campo isolado.
     datajud_api_key: str = ''
     datajud_base_url: str = 'https://api-publica.datajud.cnj.jus.br'
     datajud_timeout_seconds: int = 40
@@ -65,3 +75,35 @@ def parse_allowed_origins(raw: str) -> list[str]:
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+# Chave pública oficial do DataJud/CNJ — confirmada ao vivo na wiki oficial
+# (datajud-wiki.cnj.jus.br/api-publica/acesso) em 04/07/2026. NÃO é segredo:
+# é a MESMA chave publicada pelo CNJ pra qualquer pessoa usar. O CNJ pode
+# rotacionar essa chave a qualquer momento — se a busca por CNJ começar a
+# falhar com erro de autenticação, confira o valor atual na wiki e defina
+# DATAJUD_API_KEY no .env com o valor novo (tem prioridade sobre este default).
+DEFAULT_DATAJUD_PUBLIC_API_KEY = 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=='
+
+
+def resolved_datajud_api_key(settings: Settings | None = None) -> str:
+    """Ponto único de decisão: DATAJUD_API_KEY do usuário tem prioridade;
+    se estiver vazia, cai pra chave pública padrão do CNJ. Nunca espalhar
+    esse fallback em outros lugares do código — só aqui."""
+    settings = settings or get_settings()
+    return settings.datajud_api_key or DEFAULT_DATAJUD_PUBLIC_API_KEY
+
+
+def datajud_key_source(settings: Settings | None = None) -> str:
+    """Pra exibição/diagnóstico: diz se a chave em uso veio do .env do
+    usuário ou é a pública padrão — nunca expõe o valor em si."""
+    settings = settings or get_settings()
+    return 'configurado_pelo_usuario' if settings.datajud_api_key else 'chave_publica_padrao'
+
+
+def mask_api_key(value: str) -> str:
+    """Mascara qualquer chave pra exibição/log: mostra só os 6 primeiros e
+    4 últimos caracteres. Nunca usar o valor completo em resposta pública."""
+    if not value or len(value) <= 12:
+        return '***'
+    return f'{value[:6]}...{value[-4:]}'
