@@ -297,7 +297,7 @@ Novos endpoints protegidos pelo mesmo mecanismo de autenticação interna:
 - `POST /api/official-precatorio/plan` — plano de busca por camadas para chegar a precatório/RPV/LOA.
 - `POST /api/dossier` — combina a busca processual existente com o plano oficial de precatório/orçamento.
 
-Documento principal: `docs/RAIO_X_PRECATÓRIOS_ARQUITETURA.md`.
+Documento principal: `docs/RAIO_X_PRECATORIOS_ARQUITETURA.md`.
 
 Exemplo:
 
