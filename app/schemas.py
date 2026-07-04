@@ -192,7 +192,7 @@ class DossierRequest(SearchRequest):
 class StjSearchRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    search_type: Literal['sequencial', 'precatorio_number', 'requisitorio_number', 'rpv_number', 'cnj', 'numero_processo'] = 'sequencial'
+    search_type: Literal['sequencial', 'precatorio_number', 'requisitorio_number', 'rpv_number', 'cnj', 'numero_processo', 'name'] = 'sequencial'
     search_key: str
     ano_orcamento: int | None = None
 
