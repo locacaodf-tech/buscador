@@ -1,7 +1,6 @@
 import asyncio
 import os
 
-import pytest
 from fastapi.testclient import TestClient
 
 os.environ.setdefault('APP_LOGIN_PASSWORD', '')
@@ -35,7 +34,7 @@ def test_registry_tem_todas_as_fontes_pedidas():
     }
     assert len(tjs_estaduais) == 26  # 26 estados (DF fica em outra camada, é distrital não estadual)
     esperadas = tjs_estaduais | {
-        'receita_pgfn_cnd_portal', 'serpro_consulta_cnd', 'cjf_certidao_unificada',
+        'receita_pgfn_cnd_portal', 'serpro_consulta_cnd', 'cjf_certidao_unificada', 'tjdft_certidoes',
         'stf_certidoes', 'stj_certidoes', 'tst_certidoes', 'trt_certidoes_base',
     }
     assert esperadas == set(CERTIFICATE_SOURCE_REGISTRY)
@@ -52,11 +51,19 @@ def test_tjba_marcado_como_bloqueado_por_robots_txt():
     assert 'robots.txt' in tjba.notes
 
 
-def test_tjsp_e_tjsc_marcados_como_exigindo_gov_br():
-    for key in ['tjsp_certidoes', 'tjsc_certidoes']:
-        source = CERTIFICATE_SOURCE_REGISTRY[key]
-        assert source.requires_login is True
-        assert 'gov.br' in source.notes
+def test_tjsc_marcado_como_exigindo_gov_br():
+    tjsc = CERTIFICATE_SOURCE_REGISTRY['tjsc_certidoes']
+    assert tjsc.requires_login is True
+    assert 'gov.br' in tjsc.notes
+
+
+def test_tjsp_aponta_para_cadastro_de_pedido_nao_para_faq():
+    """Bug real encontrado pelo usuário: o link apontava pra página de
+    Perguntas Frequentes em vez do formulário de pedido de certidão."""
+    tjsp = CERTIFICATE_SOURCE_REGISTRY['tjsp_certidoes']
+    assert 'DuvidasFrequentes' not in tjsp.official_url
+    assert 'CertidoesPrimeiraInstancia' in tjsp.official_url
+    assert tjsp.requires_login is False  # a 1ª instância (esse link) é gratuita, sem gov.br
 
 
 def test_fontes_nao_pesquisadas_declaram_isso():
