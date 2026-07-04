@@ -81,7 +81,8 @@ class DataJudConnector(BaseConnector):
         if search_type in {'cpf', 'cnpj', 'name', 'oab'}:
             raise SearchNotSupported(
                 'A API pública do DataJud não expõe busca aberta por parte/CPF/nome. '
-                'Use Judit/Escavador/Jusbrasil ou integração oficial com credenciais.'
+                'Não há fonte gratuita para isso de forma ampla; dependeria de provedor externo pago ou convênio institucional. '
+                'Se for buscar por nome dentro de um precatório do STJ já carregado, use a busca por nome do STJ em vez desta.'
             )
         if search_type in {'requisitorio_number', 'precatorio_number', 'rpv_number', 'unknown'}:
             raise SearchNotSupported(
