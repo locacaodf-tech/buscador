@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     stj_local_dir: str = ''
     # Pasta onde os XLSX enviados pela tela STJ ficam salvos. Em Render com disco persistente, use /data/stj_uploads.
     stj_upload_dir: str = ''
+    # Pasta onde os anexos de evidência manual (PDF/XLSX/print) ficam salvos.
+    # Em Render com disco persistente, use /data/evidencias_manuais.
+    evidence_upload_dir: str = ''
     # API Serpro Consulta CND (Receita/PGFN) — serviço oficial PAGO, contratado
     # na Loja Serpro. Vazio = conector responde 'requer_api_contratada'.
     serpro_cnd_consumer_key: str = ''
