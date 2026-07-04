@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import csv
 import io
-import re
 from typing import Any
 
 import httpx
 
 from .base import BaseConnector, ConnectorCapability, ConnectorError, SearchNotSupported
-from ..utils.cnj import normalize_cnj  # noqa: F401  (mantido por simetria com os outros conectores; não usado aqui)
 
 # Fonte oficial verificada ao vivo em 01/07/2026:
 # https://www.gov.br/planejamento/pt-br/assuntos/orcamento/precatorios-content/painel-precatorios/dados-abertos
