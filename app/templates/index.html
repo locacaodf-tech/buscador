@@ -551,6 +551,7 @@
         <span class="hub-label">Consultar/planejar certidões</span>
       </button>
     </div>
+    <div id="ultimasDiligenciasArea" style="margin-top:20px;"></div>
     <a href="#" class="link-diagnostico" id="linkAbrirDiagnostico" style="display:block; text-align:center; margin-top:18px;">⚙️ Ver se minha ferramenta está pronta</a>
   </section>
 
@@ -1752,28 +1753,6 @@
 
   // ================= Diligência diária (hub do Modo Simples) =================
 
-  function demoDossier(searchType, searchKey) {
-    const officialDemo = demoOfficialResponse(searchType === 'auto' ? 'cnj' : searchType, searchKey, 'TRF1', {});
-    return {
-      status: 'completed',
-      search_type: searchType,
-      search_key_masked: maskForDisplay(searchKey || '00012345620244013400'),
-      _demo: true,
-      summary: { process_results: 1, official_precatorio_sources_considered: 8, missing_recommended_fields: ['tribunal/trf', 'ano_orcamento (quando a pergunta for LOA/orçamento)'] },
-      processual_datajud_private_apis: officialDemo,
-      official_precatorio_loa_budget_plan: {
-        layers: [
-          { layer: 'descoberta_processual', goal: 'Encontrar processos relacionados ao identificador informado.', sources: ['datajud', 'judit'] },
-          { layer: 'localizacao_requisitorio', goal: 'A partir do processo, localizar número do requisitório/precatório/RPV.', sources: ['trf1_precatorios', 'stj_precatorios'] },
-          { layer: 'loa_orcamento', goal: 'Confirmar exercício orçamentário, PLOA/LOA e órgão orçamentário.', sources: ['mpo_siop_precatorios_dados_abertos', 'loa_camara_uniao'] },
-          { layer: 'fila_pagamento_status', goal: 'Buscar situação, ordem cronológica, pagamento e banco quando disponível.', sources: ['trf1_precatorios'] },
-        ],
-        missing_recommended_fields: ['ano_orcamento (quando a pergunta for LOA/orçamento)'],
-      },
-      important_note: 'Indício processual não confirma inscrição em LOA. Confirmação exige fonte oficial de precatório/LOA no plano.',
-    };
-  }
-
   // ================= Hub de 4 botões (MVP operacional) =================
 
   const PAINEIS = ['simplePanel', 'panelCnj', 'panelPrecatorioRpv', 'simpleCertPanel', 'panelDiagnostico'];
@@ -1795,6 +1774,25 @@
   el('btnHubStj').addEventListener('click', () => { setMode(false); switchTab('stj'); });
   el('btnHubPrecatorio').addEventListener('click', () => mostrarPainel('panelPrecatorioRpv'));
   el('btnHubCertidoes').addEventListener('click', () => { mostrarPainel('simpleCertPanel'); el('certGuiaResultado').innerHTML = ''; el('certTribunalList').innerHTML = ''; el('certFieldsArea').innerHTML = ''; });
+
+  async function carregarUltimasDiligencias() {
+    const area = el('ultimasDiligenciasArea');
+    if (!area) return;
+    try {
+      const lista = await apiFetch('/api/diligencias?limit=5', { method: 'GET', headers: buildHeaders(false) });
+      if (!lista.length) { area.innerHTML = ''; return; }
+      let html = '<div class="plano-grupo"><div class="grupo-titulo">Últimas diligências</div>';
+      lista.forEach((d) => {
+        html += '<div class="plano-item disponivel"><span>#' + d.id + ' — ' + escapeHtml(d.input_original) + ' (' + escapeHtml(d.tipo_identificado) + ')</span>';
+        html += '<a href="/api/diligencias/' + d.id + '/dossie" target="_blank" rel="noopener">Abrir dossiê →</a></div>';
+      });
+      html += '</div>';
+      area.innerHTML = html;
+    } catch (e) {
+      area.innerHTML = '';
+    }
+  }
+  carregarUltimasDiligencias();
 
   el('linkAbrirDiagnostico').addEventListener('click', async (ev) => {
     ev.preventDefault();
@@ -1842,6 +1840,13 @@
     html += campoResultado('Tipo identificado', data.tipo_identificado);
     html += campoResultado('Valor', data.valor_normalizado);
     html += '</div>';
+
+    if (data.diligencia_id) {
+      html += '<div class="dados-faltantes-box" style="background:var(--success-bg); border-color:#bfe3cd; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">';
+      html += '<span>✅ Diligência salva nº ' + data.diligencia_id + '</span>';
+      html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/diligencias/' + data.diligencia_id + '/dossie" target="_blank" rel="noopener">Abrir dossiê →</a>';
+      html += '</div>';
+    }
 
     if (data.consultas_realizadas && data.consultas_realizadas.length) {
       html += '<div class="plano-grupo"><div class="grupo-titulo">Etapas executadas</div>';
@@ -1901,6 +1906,7 @@
     const btnStj = el('btnDiligenciaIrParaStj');
     if (btnStj) btnStj.addEventListener('click', () => { setMode(false); switchTab('stj'); });
     ligarRegistroManual();
+    if (data.diligencia_id) carregarUltimasDiligencias();
   }
 
   el('btnBuscaLivre').addEventListener('click', handleBuscaLivre);
@@ -2411,45 +2417,6 @@
     return '<div class="simple-field"><span class="simple-field-label">' + escapeHtml(label) + ':</span> <span class="simple-field-value">' + escapeHtml(String(value)) + '</span></div>';
   }
 
-  function renderSimpleResult(dossier) {
-    const area = el('simpleResultsArea');
-    const proc = dossier.processual_datajud_private_apis || dossier;
-    const results = (proc && proc.results) || [];
-    let html = '';
-
-    if (dossier._demo) {
-      html += '<div class="simple-demo-banner">Isto é um EXEMPLO, pra você ver como fica. Toque em "Preciso configurar o acesso ao sistema" pra buscar de verdade.</div>';
-    }
-
-    if (!results.length) {
-      html += simpleMessage('Não encontramos nada com esse dado. Confira se digitou certo, ou tente de outro jeito (nome completo, ou só números do CPF).', 'info');
-      area.innerHTML = html;
-      return;
-    }
-
-    results.forEach((r) => {
-      const temIndicio = (r.precatorio_score || 0) > 0;
-      html += '<div class="simple-result-card">';
-      html += '<div class="simple-result-headline">' + (temIndicio ? '💰 Isto pode ser um precatório' : '📄 Encontramos um processo') + '</div>';
-      if (r.numero_processo) html += simpleRow('Número do processo', formatCnj(r.numero_processo));
-      html += simpleRow('Onde está', tribunalFriendlyName(r.tribunal));
-      if (r.credor_nome) html += simpleRow('Nome', r.credor_nome);
-      if (r.classe) html += simpleRow('Tipo', r.classe);
-      if (r.ente_devedor) html += simpleRow('Quem deve', r.ente_devedor);
-      if (r.valor_requisitado != null) html += simpleRow('Valor', formatCurrencyStj(r.valor_requisitado));
-      if (r.ano_orcamento) html += simpleRow('Ano do orçamento', r.ano_orcamento);
-      if (temIndicio) html += simpleRow('Chance de ser precatório', r.precatorio_score + '%');
-      html += '</div>';
-    });
-
-    const missing = dossier.summary && dossier.summary.missing_recommended_fields;
-    if (missing && missing.length) {
-      html += simpleMessage('Encontramos indícios, mas ainda faltam algumas confirmações oficiais pra ter certeza de tudo. Fale com quem cuida do sistema pra revisar os detalhes técnicos, se precisar.', 'info');
-    }
-
-    area.innerHTML = html;
-  }
-
 
 
   // ================= CERTIDÃO POR TRIBUNAL =================
@@ -2463,23 +2430,6 @@
     tipo_certidao: 'Tipo de certidão', instancia: 'Instância (1º ou 2º grau)', orgao_expedidor: 'Órgão expedidor do RG',
   };
   const CAMPOS_PADRAO_APROXIMADOS = ['nome', 'cpf_cnpj', 'data_nascimento', 'nome_mae'];
-
-  function demoCertTribunais() {
-    // Espelha os TJs de fato pesquisados no backend — mesmos campos, mesmas fontes.
-    return {
-      tjmg_certidoes: { name: 'TJMG (Minas Gerais)', official_url: 'https://www8.tjmg.jus.br/certidaoJudicial/faces/emitirCertidao.xhtml', accepted_inputs: ['nome', 'cpf_cnpj'], confirmado: true },
-      tjsp_certidoes: { name: 'TJSP (São Paulo)', official_url: 'https://www.tjsp.jus.br/Certidoes/Certidoes/CertidoesDuvidasFrequentes', accepted_inputs: ['nome', 'rg', 'cpf_cnpj', 'nome_pai', 'nome_mae', 'data_nascimento', 'naturalidade', 'email'], confirmado: true },
-      tjrj_certidoes: { name: 'TJRJ (Rio de Janeiro)', official_url: 'https://www4.tjrj.jus.br/portal-extrajudicial/certidao/judicial/solicitar', accepted_inputs: ['nome', 'cpf', 'rg', 'data_nascimento', 'nome_pai', 'nome_mae'], confirmado: true },
-      tjpe_certidoes: { name: 'TJPE (Pernambuco)', official_url: 'https://certidoesunificadas.app.tjpe.jus.br/', accepted_inputs: ['nome', 'cpf', 'titulo_eleitor', 'data_nascimento', 'nacionalidade', 'endereco'], confirmado: true },
-      tjce_certidoes: { name: 'TJCE (Ceará)', official_url: 'https://sirece.tjce.jus.br/sirece-web/nova/solicitacao.jsf', accepted_inputs: ['nome', 'cpf_cnpj', 'tipo_pessoa', 'instancia'], confirmado: true },
-      tjgo_certidoes: { name: 'TJGO (Goiás)', official_url: 'https://projudi.tjgo.jus.br/CertidaoNegativaPositivaPublica', accepted_inputs: ['nome', 'cpf_cnpj', 'tipo_pessoa'], confirmado: true },
-      tjpr_certidoes: { name: 'TJPR (Paraná)', official_url: 'https://portal.tjpr.jus.br/portletforms/publico/frm.do?idFormulario=4667', accepted_inputs: ['nome', 'cpf_cnpj', 'tipo_certidao'], confirmado: true },
-      tjrs_certidoes: { name: 'TJRS (Rio Grande do Sul)', official_url: 'https://www.tjrs.jus.br/novo/processos-e-servicos/servicos-processuais/emissao-de-antecedentes-e-certidoes/', accepted_inputs: ['nome', 'cpf_cnpj'], confirmado: true },
-      tjsc_certidoes: { name: 'TJSC (Santa Catarina)', official_url: 'https://certidoes.tjsc.jus.br/', accepted_inputs: ['nome', 'cpf', 'rg', 'orgao_expedidor', 'nome_mae', 'nome_pai', 'data_nascimento', 'email', 'telefone', 'finalidade'], confirmado: true },
-      tjdft_certidoes: { name: 'TJDFT (Distrito Federal)', official_url: 'https://cnc.tjdft.jus.br/solicitacao-externa', accepted_inputs: ['nome', 'cpf_cnpj', 'nome_mae'], confirmado: true },
-      tjba_certidoes: { name: 'TJBA (Bahia)', official_url: 'https://esaj.tjba.jus.br/sco/abrirCadastro.do', accepted_inputs: [], confirmado: false },
-    };
-  }
 
   // UF -> chave do tribunal estadual de certidão correspondente (pra guiar
   // automaticamente, sem o usuário ter que saber a sigla do próprio tribunal).
