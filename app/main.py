@@ -167,6 +167,51 @@ def health():
     return {'status': 'ok'}
 
 
+@app.get('/api/diagnostico', dependencies=[Depends(verify_internal_token)])
+def diagnostico_sistema():
+    """Diagnóstico honesto do que está configurado agora — pra responder,
+    sem jargão, a pergunta 'minha ferramenta está pronta pra quê?'."""
+    from .config import datajud_key_source
+    stj_dir = stj_uploads.upload_dir()
+    stj_arquivos = list(stj_dir.glob('*.xls*')) if stj_dir.exists() else []
+    ev_dir = manual_evidence.evidence_dir()
+    ev_arquivos = list(ev_dir.glob('*')) if ev_dir.exists() else []
+
+    return {
+        'datajud': {
+            'ativo': True,
+            'chave': 'chave pública padrão do CNJ' if datajud_key_source() == 'chave_publica_padrao' else 'chave própria configurada',
+            'cobre': 'Consulta por CNJ/número de processo (não busca por CPF/nome).',
+        },
+        'judit': {
+            'ativo': bool(settings.judit_enabled and settings.judit_api_key),
+            'cobre': 'Busca por CPF, CNPJ, nome e OAB.',
+            'proxima_acao': None if (settings.judit_enabled and settings.judit_api_key) else 'Não configurada. Busca por nome funciona de graça dentro dos dados do STJ já carregados.',
+        },
+        'stj': {
+            'arquivo_carregado': len(stj_arquivos) > 0,
+            'quantidade_arquivos': len(stj_arquivos),
+            'pasta_em_uso': str(stj_dir),
+        },
+        'serpro_cnd': {
+            'ativo': bool(settings.serpro_cnd_consumer_key and settings.serpro_cnd_consumer_secret),
+            'cobre': 'Certidão de Regularidade Fiscal (Receita/PGFN) automática.',
+        },
+        'evidencias_manuais': {
+            'pasta_em_uso': str(ev_dir),
+            'quantidade_salva': len(ev_arquivos),
+        },
+        'login': {
+            'ativo': bool(settings.app_login_password),
+            'sessao_dura_dias': settings.session_ttl_days,
+        },
+        'banco_de_dados': {
+            'url': settings.database_url,
+            'persistente': '/data' in settings.database_url or not settings.database_url.startswith('sqlite:///./'),
+        },
+    }
+
+
 @app.get('/api/tribunals', dependencies=[Depends(verify_internal_token)])
 def tribunals():
     return {'all': ALL_TRIBUNALS, 'federal': FEDERAL_TRIBUNALS, 'default_precatorio': DEFAULT_PRECAT_TRIBUNALS}
