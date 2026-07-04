@@ -14,11 +14,12 @@ from sqlalchemy.orm import Session
 from .auth import SESSION_COOKIE_NAME, create_session_token, verify_session_token
 from .config import get_settings, parse_allowed_origins
 from .db import get_db, init_db
-from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest
+from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest
 from .services import stj_uploads
 from .services import certificate_center
 from .services import source_master
 from .services import captcha_relay
+from .services import diligencia_engine
 from .services import manual_evidence
 from .models import CertificateRecord, ManualEvidence
 from .services.portal_automation import PORTAL_AUTOMATION_STUBS
@@ -249,6 +250,22 @@ def official_precatorio_source_registry():
 def official_precatorio_plan(request: OfficialPrecatorioPlanRequest):
     search_type, search_key = request.resolved_type_and_key()
     return build_precatorio_route_plan(search_type, search_key, request.extra_params)
+
+
+@app.post('/api/diligencia', dependencies=[Depends(verify_internal_token)])
+async def diligencia(request: DiligenciaRequest):
+    """Motor Operacional de Diligência (v28): ponto único de entrada — recebe
+    qualquer dado digitado (CPF, CNPJ, nome, OAB, CNJ, sequencial STJ,
+    precatório/RPV/requisitório) e devolve uma resposta humana e
+    estruturada, orquestrando os serviços já existentes (DataJud, STJ XLSX,
+    planejador de precatório, certidões). Funciona independente da tela —
+    qualquer cliente (a tela, um script, outra IA) pode chamar isto direto."""
+    return await diligencia_engine.run_diligencia(
+        input_texto=request.input,
+        uf=request.uf,
+        tribunal=request.tribunal,
+        objetivo=request.objetivo,
+    )
 
 
 @app.post('/api/dossier', dependencies=[Depends(verify_internal_token)])
