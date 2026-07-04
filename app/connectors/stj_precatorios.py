@@ -221,11 +221,16 @@ def match_records(records: list[dict[str, Any]], search_type: str, key: str, ano
     """Filtra registros já parseados pelo identificador buscado. Função de
     módulo, reutilizada pela busca online e pela busca em arquivo carregado."""
     key_digits = re.sub(r'\D+', '', key or '')
+    key_nome_norm = _norm(key)
     results = []
     for rec in records:
         if ano_filtro and rec.get('ano_orcamento') and int(rec['ano_orcamento']) != int(ano_filtro):
             continue
-        if search_type in {'precatorio_number', 'requisitorio_number', 'rpv_number', 'sequencial'}:
+        if search_type == 'name':
+            credor = _norm(str(rec.get('credor_nome') or ''))
+            if credor and key_nome_norm and key_nome_norm in credor:
+                results.append(rec)
+        elif search_type in {'precatorio_number', 'requisitorio_number', 'rpv_number', 'sequencial'}:
             seq = re.sub(r'\D+', '', str(rec.get('sequencial') or ''))
             if seq and seq == key_digits:
                 results.append(rec)
