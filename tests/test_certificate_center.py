@@ -82,8 +82,14 @@ def test_serpro_tipo_contribuinte():
 def test_serpro_sem_credenciais_responde_requer_api_contratada():
     result = asyncio.run(request_serpro_cnd('12345678900'))
     assert result['status'] == CertificateStatus.REQUER_API_CONTRATADA
-    assert 'Loja Serpro' in result['message']
-    assert 'regularize.pgfn.gov.br' in result['message']  # alternativa manual gratuita
+    # Achado real da auditoria: a mensagem vazava nome de variável de ambiente
+    # (SERPRO_CND_CONSUMER_KEY/SECRET) e o link principal apontava pra Loja
+    # Serpro (contratação paga) em vez do Regularize (emissão manual grátis).
+    assert 'SERPRO_CND_CONSUMER' not in result['message']
+    assert '.env' not in result['message']
+    assert result['fonte_url'] == 'https://www.regularize.pgfn.gov.br/'
+    assert result['fonte_url_secundaria'] == 'https://loja.serpro.gov.br/consultacnd'
+    assert 'automação futura' in result['fonte_url_secundaria_label'].lower()
 
 
 def test_fonte_nao_pesquisada_nunca_emite_certidao():
@@ -196,13 +202,15 @@ def test_mensagem_de_fonte_nao_integrada_nunca_vaza_nota_de_pesquisa_interna():
     """Bug real reportado pelo usuário (print de tela): a mensagem incluía os
     primeiros 180 caracteres de source.notes cru, o que vazou anotação de
     pesquisa interna ('MELHOR ALVO REAL PARA O captcha_relay.py...') direto
-    pra tela do usuário. A mensagem agora é genérica e nunca usa source.notes."""
+    pra tela do usuário. A mensagem agora é genérica/consciente de captcha e
+    nunca usa source.notes."""
     import asyncio
     resultado = asyncio.run(request_certificate('tjpe_certidoes', 'civel', '25683919000158', None))
     assert 'captcha_relay' not in resultado['message']
     assert 'MELHOR ALVO' not in resultado['message']
+    assert resultado['status'] == CertificateStatus.CAPTCHA_DETECTADO
     assert resultado['message'] == (
-        'TJPE - Certidões cível/criminal: fonte mapeada, mas a emissão automática '
-        'ainda não foi implementada. Emita manualmente em '
-        'https://certidoesunificadas.app.tjpe.jus.br/ por enquanto.'
+        'O portal do TJPE exige captcha/validação manual. Por enquanto, emita '
+        'manualmente pelo link oficial. Depois, registre o resultado como '
+        'evidência manual.'
     )
