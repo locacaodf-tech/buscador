@@ -247,9 +247,30 @@ def official_precatorio_source_registry():
 
 
 @app.post('/api/official-precatorio/plan', dependencies=[Depends(verify_internal_token)])
-def official_precatorio_plan(request: OfficialPrecatorioPlanRequest):
+def official_precatorio_plan(request: OfficialPrecatorioPlanRequest, db: Session = Depends(get_db)):
     search_type, search_key = request.resolved_type_and_key()
-    return build_precatorio_route_plan(search_type, search_key, request.extra_params)
+    plano = build_precatorio_route_plan(search_type, search_key, request.extra_params)
+
+    candidatos = plano.get('candidate_sources') or []
+    prontas = [c for c in candidatos if c.get('integration_status') in {'implemented', 'implemented_partial', 'implemented_configurable'}]
+    faltando = plano.get('missing_recommended_fields') or []
+    if prontas:
+        proxima_acao = f'Comece pela fonte "{prontas[0].get("name")}", que já responde automaticamente.'
+    elif faltando:
+        proxima_acao = f'Informe {faltando[0]} pra destravar mais fontes no plano.'
+    else:
+        proxima_acao = 'Confira as fontes oficiais sugeridas no plano.'
+
+    log = _salvar_diligencia(
+        db, input_original=search_key, tipo_identificado=search_type, valor_normalizado=search_key,
+        objetivo='precatorio', resumo_humano=f'{len(candidatos)} fonte(s) candidata(s) mapeada(s) no plano.',
+        proxima_acao_recomendada=proxima_acao,
+        pendencias=[f'Informe {c} para restringir melhor o plano.' for c in faltando],
+        fontes_manuais_recomendadas=[{'fonte': c.get('name'), 'acao': 'Abrir link oficial'} for c in candidatos if c.get('official_url')],
+        raw_avancado=plano,
+    )
+    plano['diligencia_id'] = log.id
+    return plano
 
 
 @app.post('/api/diligencia', dependencies=[Depends(verify_internal_token)])
@@ -308,6 +329,37 @@ def _diligencia_ou_404(diligencia_id: int, db: Session) -> DiligenciaLog:
     log = db.query(DiligenciaLog).filter(DiligenciaLog.id == diligencia_id).first()
     if not log:
         raise HTTPException(status_code=404, detail=f'Diligência {diligencia_id} não encontrada.')
+    return log
+
+
+def _salvar_diligencia(
+    db: Session, *, input_original: str, tipo_identificado: str, valor_normalizado: str,
+    objetivo: str, resumo_humano: str | None = None, proxima_acao_recomendada: str | None = None,
+    resultados_confirmados: list | None = None, indicios: list | None = None,
+    pendencias: list | None = None, fontes_manuais_recomendadas: list | None = None,
+    raw_avancado: dict | None = None,
+) -> DiligenciaLog:
+    """Ponto único de gravação de DiligenciaLog — usado tanto pelo motor
+    (/api/diligencia) quanto pelos fluxos dedicados (STJ, precatório,
+    certidões), pra que TODA consulta feita na ferramenta fique salva e
+    reabrível como dossiê, não só a busca livre."""
+    log = DiligenciaLog(
+        input_original=input_original[:500],
+        tipo_identificado=tipo_identificado,
+        valor_normalizado=valor_normalizado[:500],
+        objetivo=objetivo,
+        status='completed',
+        resumo_humano=resumo_humano,
+        proxima_acao_recomendada=proxima_acao_recomendada,
+        resultados_confirmados=resultados_confirmados,
+        indicios=indicios,
+        pendencias=pendencias,
+        fontes_manuais_recomendadas=fontes_manuais_recomendadas,
+        raw_avancado=raw_avancado,
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
     return log
 
 
@@ -455,13 +507,38 @@ async def stj_upload_xlsx(file: UploadFile = File(...)):
 
 
 @app.post('/api/stj-precatorios/search', dependencies=[Depends(verify_internal_token)])
-def stj_search(request: StjSearchRequest):
+def stj_search(request: StjSearchRequest, db: Session = Depends(get_db)):
     """Busca nos arquivos oficiais do STJ que já foram enviados via
     /api/stj-precatorios/upload-xlsx. Nunca cai para dado sintético: se
     nenhum arquivo foi carregado ainda, devolve status 'not_loaded' com a
     mensagem 'Arquivo oficial do STJ ainda não carregado.'
     """
-    return stj_uploads.search_uploaded_files(request.search_type, request.search_key, request.ano_orcamento)
+    resultado = stj_uploads.search_uploaded_files(request.search_type, request.search_key, request.ano_orcamento)
+
+    if resultado.get('status') == 'not_loaded':
+        proxima_acao = 'Arquivo oficial do STJ ainda não carregado. Envie o XLSX antes de buscar.'
+        pendencias = ['Carregar o XLSX oficial do STJ.']
+        resumo = 'STJ consultado, mas nenhum arquivo foi carregado ainda.'
+        confirmados = []
+    elif resultado.get('results'):
+        resumo = f"{len(resultado['results'])} registro(s) encontrado(s) no STJ."
+        proxima_acao = 'Dado encontrado nos arquivos oficiais do STJ que você já carregou.'
+        pendencias = []
+        confirmados = resultado['results']
+    else:
+        resumo = 'STJ consultado nos arquivos carregados, sem resultado para esse dado.'
+        proxima_acao = 'Não encontramos esse dado nos arquivos do STJ já carregados. Confira o valor ou tente outro dado.'
+        pendencias = []
+        confirmados = []
+
+    log = _salvar_diligencia(
+        db, input_original=request.search_key, tipo_identificado=f'stj_{request.search_type}',
+        valor_normalizado=request.search_key, objetivo='precatorio',
+        resumo_humano=resumo, proxima_acao_recomendada=proxima_acao,
+        resultados_confirmados=confirmados, pendencias=pendencias, raw_avancado=resultado,
+    )
+    resultado['diligencia_id'] = log.id
+    return resultado
 
 
 @app.get('/api/sources', dependencies=[Depends(verify_internal_token)])
@@ -514,7 +591,17 @@ async def certificate_request(request: CertificateRequestInput, db: Session = De
     db.add(record)
     db.commit()
     db.refresh(record)
-    return {'id': record.id, 'created_at': record.created_at.isoformat(), **result}
+
+    documento_mascarado = mask_document(request.document) if request.document else (request.name or request.source_id)
+    log = _salvar_diligencia(
+        db, input_original=documento_mascarado, tipo_identificado=f'certidao_{request.certificate_type}',
+        valor_normalizado=documento_mascarado, objetivo='certidao',
+        resumo_humano=result.get('message'), proxima_acao_recomendada=result.get('message'),
+        pendencias=[result.get('message')] if result.get('status') not in {'negativa', 'positiva'} else [],
+        fontes_manuais_recomendadas=[{'fonte': request.source_id, 'acao': 'Abrir link oficial'}] if result.get('fonte_url') else [],
+        raw_avancado=result,
+    )
+    return {'id': record.id, 'created_at': record.created_at.isoformat(), 'diligencia_id': log.id, **result}
 
 
 @app.get('/api/certificates/{certificate_id}', dependencies=[Depends(verify_internal_token)])
