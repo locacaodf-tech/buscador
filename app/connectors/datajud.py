@@ -9,7 +9,7 @@ from .base import BaseConnector, SearchNotSupported, ConnectorError, ConnectorCa
 from .tribunal_registry import TRIBUNAL_ALIASES, normalize_tribunals, FEDERAL_TRIBUNALS, DEFAULT_PRECAT_TRIBUNALS
 from ..config import get_settings, resolved_datajud_api_key
 from ..services.precatorio import build_precatorio_query
-from ..utils.cnj import normalize_cnj, infer_federal_tribunal
+from ..utils.cnj import normalize_cnj, infer_tribunal_from_cnj
 
 
 class DataJudConnector(BaseConnector):
@@ -71,9 +71,10 @@ class DataJudConnector(BaseConnector):
         if search_type in {'cnj', 'numero_processo'}:
             tribunals = kwargs.get('tribunals')
             if not tribunals:
-                # O próprio número CNJ já diz qual TRF é (dígitos J.TR) — evita
-                # consultar os 6 TRFs à toa quando dá pra saber o certo.
-                inferido = infer_federal_tribunal(search_key)
+                # O próprio número CNJ já diz qual tribunal é (dígitos J.TR,
+                # federal ou estadual) — evita consultar os 6 TRFs à toa
+                # quando dá pra saber exatamente qual é o certo.
+                inferido = infer_tribunal_from_cnj(search_key)
                 tribunals = [inferido] if inferido else FEDERAL_TRIBUNALS
             return await self.search_by_cnj(search_key, tribunals, kwargs.get('max_results') or 50)
         if search_type == 'precatorio_scan':
