@@ -1572,6 +1572,13 @@
       html += '<div><b>Consultado em:</b> ' + (r.consultado_em ? escapeHtml(new Date(r.consultado_em).toLocaleString('pt-BR')) : '—') + '</div>';
       html += '</div></div>';
     });
+    if (data.diligencia_id) {
+      html += '<div class="dados-faltantes-box" style="background:var(--success-bg); border-color:#bfe3cd; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">';
+      html += '<span>✅ Diligência salva nº ' + data.diligencia_id + '</span>';
+      html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/diligencias/' + data.diligencia_id + '/dossie" target="_blank" rel="noopener">Abrir dossiê →</a>';
+      html += '</div>';
+      if (typeof carregarUltimasDiligencias === 'function') carregarUltimasDiligencias();
+    }
     area.innerHTML = html;
   }
 
@@ -1952,16 +1959,31 @@
 
   // ---------- Painel: Analisar processo por CNJ ----------
 
+  function pareceCnjValido(raw) {
+    return digitsOnly(raw).length === 20;
+  }
+
   async function handleCnjAnalisar() {
     const cnjDigitado = el('cnjInput').value.trim();
     if (!cnjDigitado) {
       el('cnjResultArea').innerHTML = simpleMessage('Digite o número CNJ do processo.', 'info');
       return;
     }
+    if (!pareceCnjValido(cnjDigitado)) {
+      let html = simpleMessage('Este campo aceita apenas número CNJ (20 dígitos, com ou sem pontuação). Para pesquisar por nome, CPF ou outro dado, use a Busca livre de diligência.', 'info');
+      html += '<button class="simple-button" type="button" id="btnIrParaBuscaLivre" style="margin-top:12px;">Ir para busca livre</button>';
+      el('cnjResultArea').innerHTML = html;
+      el('btnIrParaBuscaLivre').addEventListener('click', () => {
+        mostrarPainel('simplePanel');
+        el('buscaLivreInput').value = cnjDigitado;
+        el('buscaLivreInput').focus();
+      });
+      return;
+    }
     el('cnjResultArea').innerHTML = simpleLoading('Consultando DataJud...');
     try {
-      const body = { provider: 'datajud', search_type: 'cnj', search_key: cnjDigitado, extra_params: {} };
-      const data = await apiFetch('/api/search', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
+      const body = { input: cnjDigitado, objetivo: 'processo' };
+      const data = await apiFetch('/api/diligencia', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
       renderCnjResultado(data, cnjDigitado);
     } catch (e) {
       el('cnjResultArea').innerHTML = simpleMessage('Não consegui consultar agora: ' + e.message, 'error');
@@ -1980,39 +2002,40 @@
 
   function renderCnjResultado(data, cnjDigitado) {
     const area = el('cnjResultArea');
-    if (!data.results || !data.results.length) {
-      let html = simpleMessage('Não encontramos esse processo no DataJud. Confira o número, ou tente novamente em alguns instantes.', 'info');
-      html += proximaAcaoBox('Confirme o número CNJ com 20 dígitos. Se estiver certo, o processo pode não estar indexado no DataJud ainda — tente o portal do tribunal diretamente.');
-      html += renderRegistroManualBox(cnjDigitado, '');
-      area.innerHTML = html;
-      ligarRegistroManual();
-      return;
-    }
-    const r = data.results[0];
-    const temIndicio = (r.precatorio_score || 0) >= 40;
+    const consulta = (data.raw_avancado && data.raw_avancado.datajud && data.raw_avancado.datajud.consulta) || {};
+    const tribunalProvavel = consulta.tribunal_provavel;
+    const statusConsulta = consulta.status_consulta;
+    const linkOficial = tribunalProvavel ? LINK_OFICIAL_POR_TRIBUNAL[tribunalProvavel.toUpperCase()] : null;
+
+    // Bloco fixo: sempre mostra CNJ digitado, normalizado, tribunal provável,
+    // fonte, data/hora e status — em qualquer um dos 3 cenários possíveis.
     let html = '<div class="stj-result-card">';
-    html += '<div class="stj-result-headline">' + (temIndicio ? '💰 Processo com indício de precatório/RPV' : '📄 Processo encontrado') + '</div>';
-    html += campoResultado('Número CNJ', formatCnj(r.numero_processo || cnjDigitado));
-    html += campoResultado('Tribunal', tribunalFriendlyName(r.tribunal));
-    html += campoResultado('Classe', r.classe);
-    html += campoResultado('Assunto', r.assunto);
-    html += campoResultado('Órgão julgador', r.orgao_julgador);
-    html += campoResultado('Última movimentação', r.ultima_atualizacao);
-    if (r.movimentos_relevantes && r.movimentos_relevantes.length) {
-      html += campoResultado('Movimentos relevantes', r.movimentos_relevantes.join('; '));
-    } else if (r.precatorio_flags && r.precatorio_flags.length) {
-      html += campoResultado('Indícios encontrados', r.precatorio_flags.join(', '));
-    }
-    html += campoResultado('Fonte', 'DataJud/CNJ (' + (data.provider_used || 'datajud') + ')');
-    html += campoResultado('Data da consulta', new Date().toLocaleString('pt-BR'));
+    html += campoResultado('CNJ digitado', cnjDigitado);
+    html += campoResultado('CNJ normalizado', consulta.cnj_formatado || formatCnj(data.valor_normalizado));
+    html += campoResultado('Tribunal provável', tribunalProvavel ? tribunalFriendlyName(tribunalProvavel) : 'Não foi possível inferir');
+    html += campoResultado('Fonte consultada', consulta.fonte || 'DataJud/CNJ');
+    html += campoResultado('Data/hora da consulta', consulta.consultado_em ? new Date(consulta.consultado_em).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'));
+    html += campoResultado('Status da consulta', {
+      encontrado: 'Processo encontrado',
+      consultado_sem_resultado: 'DataJud consultado, sem resultado para este CNJ',
+      falhou: 'Não foi possível consultar o DataJud agora (rede/API)',
+    }[statusConsulta] || 'Processado');
     html += '</div>';
 
-    const linkOficial = LINK_OFICIAL_POR_TRIBUNAL[(r.tribunal || '').toUpperCase()];
-    if (temIndicio) {
+    const resultados = data.resultados_confirmados || [];
+    const indicios = data.indicios || [];
+
+    if (statusConsulta === 'falhou') {
+      html += proximaAcaoBox(data.proxima_acao_recomendada);
+    } else if (statusConsulta === 'consultado_sem_resultado') {
+      html += proximaAcaoBox(data.proxima_acao_recomendada);
+      if (linkOficial) html += '<div style="margin-top:10px;"><a class="cert-copy-btn" style="text-decoration:none; display:inline-block;" href="' + escapeHtml(linkOficial) + '" target="_blank" rel="noopener">Abrir fonte oficial do ' + escapeHtml(tribunalProvavel) + ' →</a></div>';
+    } else if (indicios.length) {
+      const ind = indicios[0];
       html += '<div class="indicio-precatorio-box">';
       html += '<div class="titulo">Próxima etapa para confirmar precatório oficial</div>';
-      html += '<p style="margin:0 0 10px;">Há apenas indício processual. Para confirmar precatório, consulte ' + escapeHtml(tribunalFriendlyName(r.tribunal)) + '/CJF/SisPreq/LOA.</p>';
-      html += campoResultado('Fonte provável', tribunalFriendlyName(r.tribunal) + ' (precatório/RPV)');
+      html += '<p style="margin:0 0 10px;">Há apenas indício processual. Para confirmar precatório, consulte ' + escapeHtml(tribunalFriendlyName(ind.fonte_provavel || tribunalProvavel)) + '/CJF/SisPreq/LOA.</p>';
+      html += campoResultado('Fonte provável', tribunalFriendlyName(ind.fonte_provavel || tribunalProvavel) + ' (precatório/RPV)');
       html += campoResultado('Dados necessários', 'Número do processo, tribunal, e (se possível) número do requisitório/precatório');
       html += '<div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">';
       html += '<button class="cert-copy-btn" type="button" id="btnCopiarDadosCnj">Copiar dados para consulta</button>';
@@ -2020,19 +2043,38 @@
       html += '</div>';
       html += '<div class="dados-faltantes-box" style="margin-top:12px;">Status: confirmação oficial ainda pendente — isto é indício processual, não confirmação de precatório/LOA.</div>';
       html += '</div>';
-      html += proximaAcaoBox('Abra a fonte oficial acima com os dados copiados pra confirmar o precatório de verdade. Se não conseguir automaticamente, registre o que encontrar manualmente abaixo.');
+      html += proximaAcaoBox(data.proxima_acao_recomendada);
+    } else if (resultados.length) {
+      const r = resultados[0];
+      html += '<div class="stj-result-card">';
+      html += '<div class="stj-result-headline">📄 Detalhes do processo</div>';
+      html += campoResultado('Classe', r.classe);
+      html += campoResultado('Assunto', r.assunto);
+      html += campoResultado('Órgão julgador', r.orgao_julgador);
+      html += campoResultado('Última movimentação', r.ultima_movimentacao);
+      html += '</div>';
+      html += proximaAcaoBox(data.proxima_acao_recomendada);
     } else {
-      html += proximaAcaoBox('Nenhum indício de precatório neste processo por enquanto. Se você já sabe o número do precatório/RPV, use "Localizar precatório/RPV" no menu principal.');
+      html += proximaAcaoBox(data.proxima_acao_recomendada);
     }
-    html += renderRegistroManualBox(r.numero_processo || cnjDigitado, tribunalFriendlyName(r.tribunal));
+
+    if (data.diligencia_id) {
+      html += '<div class="dados-faltantes-box" style="background:var(--success-bg); border-color:#bfe3cd; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">';
+      html += '<span>✅ Diligência salva nº ' + data.diligencia_id + '</span>';
+      html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/diligencias/' + data.diligencia_id + '/dossie" target="_blank" rel="noopener">Abrir dossiê →</a>';
+      html += '</div>';
+    }
+
+    html += renderRegistroManualBox(cnjDigitado, tribunalProvavel ? tribunalFriendlyName(tribunalProvavel) : '');
     area.innerHTML = html;
 
     const btnCopiar = el('btnCopiarDadosCnj');
     if (btnCopiar) {
-      const textoCopia = 'CNJ: ' + formatCnj(r.numero_processo || cnjDigitado) + ' | Tribunal: ' + tribunalFriendlyName(r.tribunal);
+      const textoCopia = 'CNJ: ' + (consulta.cnj_formatado || formatCnj(data.valor_normalizado)) + ' | Tribunal: ' + (tribunalProvavel || '');
       btnCopiar.addEventListener('click', () => copiarTexto(textoCopia, btnCopiar));
     }
     ligarRegistroManual();
+    if (data.diligencia_id) carregarUltimasDiligencias();
   }
 
   // ---------- Registro manual de evidência (reaproveitável em qualquer fluxo) ----------
@@ -2117,16 +2159,20 @@
     el('precatorioResultArea').innerHTML = simpleLoading('Montando plano de busca...');
     try {
       const body = { search_type: tipo, search_key: searchKey, extra_params: extraParams };
-      const data = await apiFetch('/api/official-precatorio/plan', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) });
-      renderPlanoPrecatorio(data);
+      const [data, diag] = await Promise.all([
+        apiFetch('/api/official-precatorio/plan', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify(body) }),
+        apiFetch('/api/diagnostico', { method: 'GET', headers: buildHeaders(false) }).catch(() => null),
+      ]);
+      renderPlanoPrecatorio(data, diag);
     } catch (e) {
       el('precatorioResultArea').innerHTML = simpleMessage('Não consegui montar o plano agora: ' + e.message, 'error');
     }
   }
 
-  function renderPlanoPrecatorio(data) {
+  function renderPlanoPrecatorio(data, diag) {
     const area = el('precatorioResultArea');
     let html = '';
+    const stjRealmenteCarregado = !!(diag && diag.stj && diag.stj.arquivo_carregado);
 
     const faltando = data.missing_recommended_fields || [];
     if (faltando.length) {
@@ -2137,10 +2183,18 @@
     const grupos = { disponivel: [], credencial: [], manual: [], nao_automatizado: [] };
     candidatos.forEach((src) => {
       const status = src.integration_status || '';
+      const ehStj = /stj/i.test(src.key || src.name || '');
       let grupo = 'nao_automatizado';
       if (['implemented', 'implemented_partial', 'implemented_configurable'].includes(status)) grupo = 'disponivel';
       else if (status.includes('credencial') || status.includes('credential')) grupo = 'credencial';
       else if (src.captcha_expected === true || status === 'captcha_detected') grupo = 'manual';
+      // O STJ só é "já disponível" de verdade se o XLSX oficial já foi
+      // carregado nesta sessão — o status do registry é estático e não sabe
+      // disso. Sem checar isso, o plano prometia automação que ainda não existe.
+      if (ehStj && grupo === 'disponivel' && !stjRealmenteCarregado) {
+        grupo = 'nao_automatizado';
+        src._stjPendenteUpload = true;
+      }
       grupos[grupo].push(src);
     });
 
@@ -2154,8 +2208,13 @@
       if (!grupos[chave].length) return;
       html += '<div class="plano-grupo"><div class="grupo-titulo">' + escapeHtml(titulo) + '</div>';
       grupos[chave].forEach((src) => {
-        html += '<div class="plano-item ' + chave + '"><span>' + escapeHtml(src.name || src.key) + '</span>';
-        if (src.official_url) html += '<a href="' + escapeHtml(src.official_url) + '" target="_blank" rel="noopener">Abrir link oficial →</a>';
+        const rotulo = src._stjPendenteUpload ? ' — disponível após carregar o XLSX oficial' : '';
+        html += '<div class="plano-item ' + chave + '"><span>' + escapeHtml(src.name || src.key) + escapeHtml(rotulo) + '</span>';
+        if (src._stjPendenteUpload) {
+          html += '<button class="cert-copy-btn" type="button" data-ir-stj="1">Ir para upload STJ</button>';
+        } else if (src.official_url) {
+          html += '<a href="' + escapeHtml(src.official_url) + '" target="_blank" rel="noopener">Abrir link oficial →</a>';
+        }
         html += '</div>';
       });
       html += '</div>';
@@ -2166,11 +2225,23 @@
     }
 
     let proxima = 'Informe o número do precatório e o tribunal pra restringir a busca.';
-    if (grupos.disponivel.length) proxima = 'Comece pela fonte "' + (grupos.disponivel[0].name || '') + '", que já responde automaticamente.';
+    const disponivelReal = grupos.disponivel.find((s) => !s._stjPendenteUpload);
+    if (disponivelReal) proxima = 'Comece pela fonte "' + (disponivelReal.name || '') + '", que já responde automaticamente.';
+    else if (candidatos.some((s) => s._stjPendenteUpload)) proxima = 'Carregue o XLSX oficial do STJ pra destravar consulta automática dessa fonte.';
     else if (faltando.length) proxima = 'Informe ' + faltando[0] + ' pra destravar mais fontes no plano.';
     html += proximaAcaoBox(proxima);
 
+    if (data.diligencia_id) {
+      html += '<div class="dados-faltantes-box" style="background:var(--success-bg); border-color:#bfe3cd; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">';
+      html += '<span>✅ Diligência salva nº ' + data.diligencia_id + '</span>';
+      html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/diligencias/' + data.diligencia_id + '/dossie" target="_blank" rel="noopener">Abrir dossiê →</a>';
+      html += '</div>';
+      carregarUltimasDiligencias();
+    }
+
     area.innerHTML = html;
+    const btnIrStj = area.querySelector('[data-ir-stj]');
+    if (btnIrStj) btnIrStj.addEventListener('click', () => { setMode(false); switchTab('stj'); });
   }
   el('btnPrecatorioLocalizar').addEventListener('click', handlePrecatorioLocalizar);
 
@@ -2278,8 +2349,16 @@
     let html = '<div class="cert-result-box"><div class="status-line">' + escapeHtml(statusEmPortugues(data.status)) + '</div>';
     html += '<div>' + escapeHtml(data.message || '') + '</div>';
     if (data.fonte_url) html += '<div style="margin-top:8px;font-size:12px;"><a href="' + escapeHtml(data.fonte_url) + '" target="_blank" rel="noopener">' + escapeHtml(data.fonte_url) + '</a></div>';
+    if (data.fonte_url_secundaria) html += '<div style="margin-top:6px;font-size:12px;"><a href="' + escapeHtml(data.fonte_url_secundaria) + '" target="_blank" rel="noopener">' + escapeHtml(data.fonte_url_secundaria_label || data.fonte_url_secundaria) + '</a></div>';
     if (data.consulted_at) html += '<div style="margin-top:4px;font-size:11.5px;color:var(--ink-soft);">Consultado em: ' + escapeHtml(new Date(data.consulted_at).toLocaleString('pt-BR')) + '</div>';
     html += '</div>';
+    if (data.diligencia_id) {
+      html += '<div class="dados-faltantes-box" style="background:var(--success-bg); border-color:#bfe3cd; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">';
+      html += '<span>✅ Diligência salva nº ' + data.diligencia_id + '</span>';
+      html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/diligencias/' + data.diligencia_id + '/dossie" target="_blank" rel="noopener">Abrir dossiê →</a>';
+      html += '</div>';
+      carregarUltimasDiligencias();
+    }
     el('certResultArea').innerHTML = html;
   }
 
@@ -2411,6 +2490,11 @@
     document.body.classList.toggle('simple-mode', simple);
     el('btnModeSimple').classList.toggle('active', simple);
     el('btnModeAvancado').classList.toggle('active', !simple);
+    // mostrarPainel() grava style="display:none" direto no elemento, o que
+    // tem prioridade sobre qualquer regra de CSS por classe. Sem isso, voltar
+    // pro modo simples depois de ter navegado por um painel (CNJ, precatório
+    // etc.) deixava o hub inteiro invisível, mesmo com a classe certa no body.
+    if (simple) mostrarPainel('simplePanel');
   }
   el('btnModeSimple').addEventListener('click', () => setMode(true));
   el('btnModeAvancado').addEventListener('click', () => setMode(false));
