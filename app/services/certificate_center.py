@@ -60,7 +60,7 @@ CERTIFICATE_SOURCE_REGISTRY: dict[str, CertificateSource] = {
         scope='federal_fiscal',
         certificate_types=('fiscal_cnd',),
         source_type='api_contratada',
-        official_url='https://loja.serpro.gov.br/consultacnd',
+        official_url='https://www.regularize.pgfn.gov.br/',
         requires_api_contract=True,
         captcha_expected=False,
         accepted_inputs=('cpf', 'cnpj', 'nirf'),
@@ -431,12 +431,12 @@ async def request_serpro_cnd(document: str, gerar_pdf: bool = True) -> dict[str,
         return {
             'status': CertificateStatus.REQUER_API_CONTRATADA,
             'message': (
-                'API Serpro Consulta CND não configurada. É uma API oficial paga (Loja Serpro, custo mensal por faixa '
-                'de consumo). Após contratar, coloque SERPRO_CND_CONSUMER_KEY e SERPRO_CND_CONSUMER_SECRET no .env — '
-                'nada muda no código. Enquanto isso, a CND pode ser emitida manualmente e grátis no portal '
-                'https://www.regularize.pgfn.gov.br/.'
+                'Para emitir automaticamente, seria necessário contratar uma API paga (Serpro). '
+                'Por enquanto, emita gratuitamente e na hora no portal oficial da PGFN.'
             ),
-            'fonte_url': 'https://loja.serpro.gov.br/consultacnd',
+            'fonte_url': 'https://www.regularize.pgfn.gov.br/',
+            'fonte_url_secundaria': 'https://loja.serpro.gov.br/consultacnd',
+            'fonte_url_secundaria_label': 'Contratar API Serpro para automação futura',
             'consulted_at': consulted_at,
         }
 
@@ -515,7 +515,11 @@ async def request_certificate(source_id: str, certificate_type: str, document: s
     # Fontes mapeadas/não pesquisadas: resposta honesta, nunca certidão inventada.
     if source.integration_status == 'not_researched':
         return {'status': CertificateStatus.NAO_INTEGRADO,
-                'message': f'{source.name}: fonte registrada no escopo mas ainda não pesquisada — capacidades, captcha e fluxo desconhecidos. Emita manualmente em {source.official_url} por enquanto.',
+                'message': f'{source.name}: fonte registrada no escopo, ainda não pesquisada em detalhe. Emita manualmente em {source.official_url} por enquanto.',
+                'fonte_url': source.official_url, 'consulted_at': consulted_at}
+    if source.captcha_expected:
+        return {'status': CertificateStatus.CAPTCHA_DETECTADO,
+                'message': f'O portal do {source.orgao} exige captcha/validação manual. Por enquanto, emita manualmente pelo link oficial. Depois, registre o resultado como evidência manual.',
                 'fonte_url': source.official_url, 'consulted_at': consulted_at}
     return {'status': CertificateStatus.NAO_INTEGRADO,
             'message': f'{source.name}: fonte mapeada, mas a emissão automática ainda não foi implementada. Emita manualmente em {source.official_url} por enquanto.',
