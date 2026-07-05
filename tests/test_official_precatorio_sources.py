@@ -23,8 +23,11 @@ def test_registry_has_core_precatorio_sources():
 
 def test_plan_for_precatorio_number_requires_tribunal_and_budget_year_when_relevant():
     plan = build_precatorio_route_plan('precatorio_number', '12345', {})
-    assert 'tribunal/trf' in plan['missing_recommended_fields']
-    assert 'ano_orcamento (quando a pergunta for LOA/orçamento)' in plan['missing_recommended_fields']
+    # Achado da auditoria: os campos faltantes apareciam com nome técnico cru
+    # (ano_orcamento, tribunal/trf) direto na tela do usuário.
+    assert 'tribunal (qual TRF/TJ)' in plan['missing_recommended_fields']
+    assert any('ano-orçamento' in campo for campo in plan['missing_recommended_fields'])
+    assert not any('_' in campo for campo in plan['missing_recommended_fields'])  # sem underscore técnico
     assert any(layer['layer'] == 'loa_orcamento' for layer in plan['route_layers'])
 
 
