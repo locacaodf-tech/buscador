@@ -512,11 +512,11 @@ def build_precatorio_route_plan(search_type: str, search_key: str, extra_params:
 
     missing: list[str] = []
     if search_type in {'oab'} and not extra_params.get('uf'):
-        missing.append('uf')
+        missing.append('UF (estado da OAB)')
     if search_type in {'numero_requisitorio', 'requisitorio_number', 'numero_precatorio', 'precatorio_number', 'rpv_number'} and not (extra_params.get('tribunal') or extra_params.get('trf')):
-        missing.append('tribunal/trf')
+        missing.append('tribunal (qual TRF/TJ)')
     if 'ano_orcamento' not in extra_params and search_type in {'numero_precatorio', 'precatorio_number', 'ano_orcamento'}:
-        missing.append('ano_orcamento (quando a pergunta for LOA/orçamento)')
+        missing.append('ano-orçamento (exercício da LOA), quando a pergunta for sobre orçamento')
 
     layers = [
         {
