@@ -55,9 +55,10 @@ def test_search_sem_tribunal_explicito_infere_pelo_proprio_cnj(monkeypatch):
     assert chamadas[-1] == ['TRF1'], f'deveria ter consultado só TRF1, consultou {chamadas[-1]}'
 
 
-def test_search_com_cnj_nao_federal_cai_no_fallback_de_todos_os_trfs(monkeypatch):
-    """CNJ de segmento não-federal (ex.: estadual) não permite inferir TRF —
-    aí sim faz sentido manter o fallback antigo (consultar todos)."""
+def test_search_com_cnj_estadual_infere_o_tj_certo(monkeypatch):
+    """Achado real da segunda rodada de auditoria: CNJ de segmento estadual
+    (8) também tem o tribunal certo nos próprios dígitos — TR=07 é TJDFT,
+    confirmado contra a tabela oficial do CNJ (Resolução 65/2008)."""
     connector = DataJudConnector()
     chamadas = []
 
@@ -66,8 +67,25 @@ def test_search_com_cnj_nao_federal_cai_no_fallback_de_todos_os_trfs(monkeypatch
         return []
 
     monkeypatch.setattr(connector, 'search_by_cnj', fake_search_by_cnj)
-    asyncio.run(connector.search('cnj', '0000000-00.2020.8.07.0001'))  # segmento 8 = estadual
-    assert len(chamadas[-1]) == 6  # fallback pros 6 TRFs, já que nao deu pra inferir
+    asyncio.run(connector.search('cnj', '0000000-00.2020.8.07.0001'))  # segmento 8, TR=07 = TJDFT
+    assert chamadas[-1] == ['TJDFT']
+
+
+def test_search_com_cnj_de_segmento_nao_coberto_cai_no_fallback(monkeypatch):
+    """Segmentos não cobertos pela inferência (ex.: 5 = Justiça do Trabalho)
+    não permitem inferir um tribunal único — aí sim mantém o fallback
+    antigo (consultar os 6 TRFs), mesmo sabendo que não é o ideal pra esse
+    caso específico; não é o escopo desta correção mudar isso."""
+    connector = DataJudConnector()
+    chamadas = []
+
+    async def fake_search_by_cnj(cnj, tribunals=None, max_results=50):
+        chamadas.append(tribunals)
+        return []
+
+    monkeypatch.setattr(connector, 'search_by_cnj', fake_search_by_cnj)
+    asyncio.run(connector.search('cnj', '0000000-00.2020.5.02.0001'))  # segmento 5 = trabalhista
+    assert len(chamadas[-1]) == 6
 
 
 def test_search_respeita_tribunal_explicito_mesmo_com_cnj_inferivel(monkeypatch):
