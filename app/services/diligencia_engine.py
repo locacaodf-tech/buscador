@@ -37,6 +37,9 @@ def _judit_configurada() -> bool:
 
 
 async def _consultar_cnj(valor: str, tribunal_hint: str | None) -> dict[str, Any]:
+    from ..utils.cnj import infer_tribunal_from_cnj, format_cnj
+    from datetime import datetime, timezone
+
     etapas = []
     resultados_confirmados = []
     indicios = []
@@ -44,14 +47,27 @@ async def _consultar_cnj(valor: str, tribunal_hint: str | None) -> dict[str, Any
     proxima_acao = None
     raw = {}
 
+    tribunal_provavel = tribunal_hint.upper() if tribunal_hint else infer_tribunal_from_cnj(valor)
+    consulta_info = {
+        'cnj_normalizado': valor,
+        'cnj_formatado': format_cnj(valor),
+        'tribunal_provavel': tribunal_provavel,
+        'fonte': 'DataJud/CNJ (api-publica.datajud.cnj.jus.br)',
+        'consultado_em': datetime.now(timezone.utc).isoformat(),
+    }
+    raw['consulta'] = consulta_info
+
     connector = DataJudConnector()
     tribunals = [tribunal_hint.upper()] if tribunal_hint else None
     try:
         items = await connector.search('cnj', valor, tribunals=tribunals, max_results=10)
     except (ConnectorError, SearchNotSupported, ProviderNotConfigured) as exc:
+        consulta_info['status_consulta'] = 'falhou'
         etapas.append(_etapa('DataJud', 'falhou', str(exc)))
         pendencias.append('DataJud não respondeu — tente novamente em instantes ou confira o número.')
-        proxima_acao = 'DataJud não respondeu agora. Confira o número CNJ e tente de novo em alguns instantes.'
+        proxima_acao = 'Não foi possível consultar o DataJud agora. Tente novamente em instantes, ou consulte o portal do tribunal diretamente.'
+        if tribunal_provavel:
+            proxima_acao += f' Tribunal provável: {tribunal_provavel}.'
         raw['datajud_erro'] = str(exc)
         return {
             'etapas': etapas, 'resultados_confirmados': resultados_confirmados,
@@ -64,9 +80,12 @@ async def _consultar_cnj(valor: str, tribunal_hint: str | None) -> dict[str, Any
     encontrados = [i for i in items if not i.get('error')]
 
     if erros and not encontrados:
+        consulta_info['status_consulta'] = 'falhou'
         etapas.append(_etapa('DataJud', 'falhou', '; '.join(str(e.get('error')) for e in erros[:3])))
         pendencias.append('DataJud não respondeu pra este número agora.')
-        proxima_acao = 'DataJud não respondeu agora. Tente de novo em instantes.'
+        proxima_acao = 'Não foi possível consultar o DataJud agora. Tente novamente em instantes.'
+        if tribunal_provavel:
+            proxima_acao += f' Tribunal provável: {tribunal_provavel}.'
         return {
             'etapas': etapas, 'resultados_confirmados': resultados_confirmados,
             'indicios': indicios, 'pendencias': pendencias,
@@ -74,14 +93,18 @@ async def _consultar_cnj(valor: str, tribunal_hint: str | None) -> dict[str, Any
         }
 
     if not encontrados:
-        etapas.append(_etapa('DataJud', 'concluido', 'Nenhum processo encontrado para este CNJ.'))
-        proxima_acao = 'Não encontramos esse processo no DataJud. Confira o número, ou tente o portal do tribunal diretamente.'
+        consulta_info['status_consulta'] = 'consultado_sem_resultado'
+        etapas.append(_etapa('DataJud', 'concluido', 'Consulta feita no DataJud, mas não houve resultado para este CNJ.'))
+        proxima_acao = 'Consulta feita no DataJud, mas não houve resultado para este CNJ. Confira o número, ou tente o portal do tribunal diretamente.'
+        if tribunal_provavel:
+            proxima_acao += f' Tribunal provável: {tribunal_provavel} — consultar o portal do {tribunal_provavel} diretamente.'
         return {
             'etapas': etapas, 'resultados_confirmados': resultados_confirmados,
             'indicios': indicios, 'pendencias': pendencias,
             'proxima_acao': proxima_acao, 'raw': raw,
         }
 
+    consulta_info['status_consulta'] = 'encontrado'
     r = encontrados[0]
     etapas.append(_etapa('DataJud', 'concluido', f"Tribunal consultado: {r.get('tribunal', '?')}"))
     tem_indicio = (r.get('precatorio_score') or 0) >= 40
