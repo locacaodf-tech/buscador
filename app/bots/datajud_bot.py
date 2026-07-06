@@ -4,6 +4,7 @@ inferência de tribunal nem o tratamento das 3 situações (inválido/sem
 resultado/falhou), que já foram corrigidas ali."""
 from __future__ import annotations
 
+from typing import Any
 from .base import BaseBot, BotResult
 from ..services import diligencia_engine
 
@@ -16,7 +17,7 @@ class DataJudBot(BaseBot):
     def can_run(self, tipo_identificado: str, objetivo: str) -> bool:
         return tipo_identificado in {'cnj', 'numero_processo'}
 
-    async def run(self, *, valor: str, uf: str | None, tribunal: str | None, objetivo: str) -> BotResult:
+    async def run(self, *, valor: str, uf: str | None, tribunal: str | None, objetivo: str, db: Any = None) -> BotResult:
         parte = await diligencia_engine._consultar_cnj(valor, tribunal)
         consulta = (parte.get('raw') or {}).get('consulta', {})
         status_consulta = consulta.get('status_consulta')
