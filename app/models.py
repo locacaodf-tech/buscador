@@ -143,3 +143,25 @@ class BotStep(Base):
     erro: Mapped[str | None] = mapped_column(Text, nullable=True)
     evidence_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class StjOfficialFile(Base):
+    """Arquivo oficial do STJ baixado automaticamente pelo StjBot (v30.2) —
+    diferente do upload manual (que fica em data/stj_uploads sem registro
+    próprio), este modelo rastreia origem, quando foi baixado e o
+    resultado do download, pra nunca fingir que uma tentativa deu certo."""
+
+    __tablename__ = 'stj_official_files'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    natureza: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    entidade_devedora: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    local_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    downloaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default='pending')  # pending|downloaded|failed
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
