@@ -231,16 +231,45 @@ def test_evidence_bot_salva_evidencia_vinculada():
 # 11. Uma etapa falhando não quebra o job todo
 # ---------------------------------------------------------------------------
 
-def test_uma_etapa_falhando_nao_quebra_as_demais(monkeypatch):
+def test_uma_etapa_falhando_nao_quebra_as_demais(monkeypatch, tmp_path):
+    """Achado real da v30.1: com CNJ, só o DataJudBot roda — se ele falhar
+    sozinho, isso é 100% do que rodou falhando (status correto: 'failed'),
+    não 'partial'. Falha PARCIAL de verdade precisa de pelo menos um bot
+    falhando e outro concluindo — usa 'PRC 123456' com objetivo=precatorio,
+    que aciona StjBot (vamos forçar falha) e PrecatorioBot (deve continuar
+    concluindo normalmente, provando que uma etapa quebrada não derruba a
+    outra)."""
+    from app.services import stj_uploads
+    isolado = tmp_path / 'stj_uploads'
+    monkeypatch.setattr(stj_uploads, 'UPLOAD_DIR', isolado)
+    monkeypatch.setattr(stj_uploads, 'upload_dir', lambda: isolado)
+
+    async def fake_run_falha(self, *, valor, uf, tribunal, objetivo):
+        raise RuntimeError('Falha simulada e inesperada')
+
+    monkeypatch.setattr('app.bots.stj_bot.StjBot.run', fake_run_falha)
+    client = TestClient(app)
+    resp = client.post('/api/bots/run', json={'input': 'PRC 123456', 'objetivo': 'precatorio'})
+    assert resp.status_code == 200  # não quebra a requisição inteira
+    body = resp.json()
+    assert body['status'] == 'partial'  # StjBot falhou, PrecatorioBot concluiu -> parcial de verdade
+    stj_step = next(b for b in body['bots_executados'] if b['bot_id'] == 'stj_bot')
+    precatorio_step = next(b for b in body['bots_executados'] if b['bot_id'] == 'precatorio_bot')
+    assert stj_step['status'] == 'falhou'
+    assert precatorio_step['status'] == 'concluido'  # a falha do StjBot não derrubou o PrecatorioBot
+
+
+def test_todos_os_bots_falhando_e_failed_nao_partial(monkeypatch):
+    """Complementa o teste acima: se TUDO que rodou falhou (aqui, só o
+    DataJudBot roda pra CNJ, e ele falha), o status correto é 'failed'."""
     async def fake_search_falha(self, search_type, search_key, **kwargs):
         raise RuntimeError('Falha simulada e inesperada')
 
     monkeypatch.setattr('app.bots.datajud_bot.DataJudBot.run', fake_search_falha)
     client = TestClient(app)
     resp = client.post('/api/bots/run', json={'input': '0032681-47.2017.4.01.3400'})
-    assert resp.status_code == 200  # não quebra a requisição inteira
     body = resp.json()
-    assert body['status'] == 'partial'
+    assert body['status'] == 'failed'
     datajud_step = next(b for b in body['bots_executados'] if b['bot_id'] == 'datajud_bot')
     assert datajud_step['status'] == 'falhou'
 
