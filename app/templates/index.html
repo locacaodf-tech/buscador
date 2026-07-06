@@ -1946,11 +1946,15 @@
   const BOT_STATUS_CLASS = {
     concluido: 'disponivel', falhou: 'credencial', pendente: 'nao_automatizado', waiting_user: 'manual',
   };
+  const JOB_STATUS_LABEL = {
+    completed: '✅ Concluído', partial: '🟡 Parcial — ainda há pendência', waiting_user: '🖐️ Aguardando ação sua',
+    failed: '❌ Falhou', pending: '⏳ Pendente', running: '⏳ Executando',
+  };
 
   function renderBotsResultado(data) {
     let html = '<div class="stj-result-card">';
     html += campoResultado('Tipo identificado', data.tipo_identificado);
-    html += campoResultado('Status geral do job', data.status);
+    html += campoResultado('Status geral', JOB_STATUS_LABEL[data.status] || data.status);
     html += '</div>';
 
     if (data.bots_executados && data.bots_executados.length) {
