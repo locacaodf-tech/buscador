@@ -305,6 +305,33 @@ async def diligencia(request: DiligenciaRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(log)
     resultado['diligencia_id'] = log.id
+
+    if request.run_bots:
+        bots_resultado = await bots_runner.executar_bots(request.input, request.uf, request.tribunal, request.objetivo)
+        job = BotJob(
+            input_original=request.input, tipo_identificado=bots_resultado['tipo_identificado'],
+            objetivo=request.objetivo, status=bots_resultado['status'],
+            resumo_humano=bots_resultado['resumo_humano'], proxima_acao=bots_resultado['proxima_acao_recomendada'],
+            raw=bots_resultado,
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        for passo in bots_resultado['bots_executados']:
+            evidence_ids = passo.get('evidence_ids') or []
+            db.add(BotStep(
+                job_id=job.id, bot_name=passo['bot_id'], status=passo['status'],
+                finished_at=datetime.now(timezone.utc) if passo['status'] != 'waiting_user' else None,
+                resultado=passo.get('resultado'), warning='; '.join(passo.get('warnings') or []) or None,
+                next_action=passo.get('next_action'), evidence_id=evidence_ids[0] if evidence_ids else None,
+            ))
+        db.commit()
+        resultado['job_id'] = job.id
+        resultado['bots_resumo'] = {
+            'status': bots_resultado['status'],
+            'bots_executados': [{'bot_id': b['bot_id'], 'nome': b['nome'], 'status': b['status']} for b in bots_resultado['bots_executados']],
+        }
+
     return resultado
 
 
@@ -424,12 +451,14 @@ async def bots_run(request: BotsRunRequest, db: Session = Depends(get_db)):
     db.refresh(job)
 
     for passo in resultado['bots_executados']:
+        evidence_ids = passo.get('evidence_ids') or []
         db.add(BotStep(
             job_id=job.id, bot_name=passo['bot_id'], status=passo['status'],
             finished_at=datetime.now(timezone.utc) if passo['status'] != 'waiting_user' else None,
             resultado=passo.get('resultado'),
             warning='; '.join(passo.get('warnings') or []) or None,
             next_action=passo.get('next_action'),
+            evidence_id=evidence_ids[0] if evidence_ids else None,
         ))
     db.commit()
 
@@ -462,6 +491,7 @@ def bots_job_detail(job_id: int, db: Session = Depends(get_db)):
             'id': s.id, 'bot_name': s.bot_name, 'status': s.status,
             'started_at': s.started_at.isoformat(), 'finished_at': s.finished_at.isoformat() if s.finished_at else None,
             'resultado': s.resultado, 'warning': s.warning, 'erro': s.erro, 'next_action': s.next_action,
+            'evidence_id': s.evidence_id,
         } for s in steps],
     }
 
@@ -499,6 +529,26 @@ async def bots_job_resume(job_id: int, request: BotsResumeRequest, db: Session =
 def bots_status_endpoint():
     """Lista os bots que existem e o que cada um faz de verdade hoje."""
     return {'bots': bots_runner.bots_status()}
+
+
+@app.get('/api/bots/jobs/{job_id}/dossie', response_class=HTMLResponse)
+def bots_job_dossie(job_id: int, request: Request, db: Session = Depends(get_db)):
+    """Página HTML do que os bots fizeram num job — input, tipo, status
+    geral, cada bot com seu status/evidência/próxima ação."""
+    if settings.app_login_password and not _has_valid_session(request):
+        return RedirectResponse(url='/login', status_code=303)
+    job = db.query(BotJob).filter(BotJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f'Job {job_id} não encontrado.')
+    steps = db.query(BotStep).filter(BotStep.job_id == job_id).all()
+    status_labels = {
+        'concluido': 'Concluído', 'falhou': 'Falhou', 'pendente': 'Pendente', 'waiting_user': 'Aguardando você',
+        'completed': 'Concluído', 'partial': 'Parcial', 'failed': 'Falhou',
+    }
+    return templates.TemplateResponse(request, 'bots_dossie.html', {
+        'job': job, 'steps': steps, 'status_labels': status_labels,
+        'status_label': status_labels.get(job.status, job.status),
+    })
 
 
 @app.post('/api/dossier', dependencies=[Depends(verify_internal_token)])
