@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,14 +15,16 @@ from sqlalchemy.orm import Session
 from .auth import SESSION_COOKIE_NAME, create_session_token, verify_session_token
 from .config import get_settings, parse_allowed_origins
 from .db import get_db, init_db
-from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest
+from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest, BotsRunRequest, BotsResumeRequest
 from .services import stj_uploads
 from .services import certificate_center
 from .services import source_master
 from .services import captcha_relay
 from .services import diligencia_engine
+from .bots import runner as bots_runner
+from .bots.portal_bot import PortalBot
 from .services import manual_evidence
-from .models import CertificateRecord, ManualEvidence, DiligenciaLog
+from .models import CertificateRecord, ManualEvidence, DiligenciaLog, BotJob, BotStep
 from .services.portal_automation import PORTAL_AUTOMATION_STUBS
 from .services.orchestrator import ProcessLookupOrchestrator, provider_capabilities
 from .connectors.tribunal_registry import ALL_TRIBUNALS, FEDERAL_TRIBUNALS, DEFAULT_PRECAT_TRIBUNALS
@@ -387,6 +390,115 @@ def dossie_diligencia(diligencia_id: int, request: Request, db: Session = Depend
         return RedirectResponse(url='/login', status_code=303)
     log = _diligencia_ou_404(diligencia_id, db)
     return templates.TemplateResponse(request, 'dossie.html', {'log': log})
+
+
+@app.post('/api/bots/run', dependencies=[Depends(verify_internal_token)])
+async def bots_run(request: BotsRunRequest, db: Session = Depends(get_db)):
+    """Camada de bots executores (v30): mesma identificação de dado do
+    motor (/api/diligencia), mas com rastreamento por bot/etapa (BotJob +
+    BotStep) — cada bot que rodou, o que encontrou, o que falhou, o que
+    ficou pendente. Se um bot pausar esperando validação humana (ex.:
+    PortalBot num captcha), o job fica com status 'waiting_user' e pode ser
+    retomado em POST /api/bots/jobs/{id}/resume."""
+    resultado = await bots_runner.executar_bots(request.input, request.uf, request.tribunal, request.objetivo)
+
+    if request.portal_url and request.portal_fill_fields and request.portal_submit_selector:
+        portal_result = await PortalBot().run_com_alvo(
+            request.portal_source_id or 'portal_manual', request.portal_url,
+            request.portal_fill_fields, request.portal_submit_selector,
+        )
+        resultado['bots_executados'].append(portal_result.as_dict())
+        if portal_result.status == 'waiting_user':
+            resultado['status'] = 'waiting_user'
+            resultado['proxima_acao_recomendada'] = portal_result.next_action
+        resultado['pendencias'] += portal_result.pendencias
+
+    job = BotJob(
+        input_original=request.input, tipo_identificado=resultado['tipo_identificado'],
+        objetivo=request.objetivo, status=resultado['status'],
+        resumo_humano=resultado['resumo_humano'], proxima_acao=resultado['proxima_acao_recomendada'],
+        raw=resultado,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    for passo in resultado['bots_executados']:
+        db.add(BotStep(
+            job_id=job.id, bot_name=passo['bot_id'], status=passo['status'],
+            finished_at=datetime.now(timezone.utc) if passo['status'] != 'waiting_user' else None,
+            resultado=passo.get('resultado'),
+            warning='; '.join(passo.get('warnings') or []) or None,
+            next_action=passo.get('next_action'),
+        ))
+    db.commit()
+
+    resultado['job_id'] = job.id
+    return resultado
+
+
+@app.get('/api/bots/jobs', dependencies=[Depends(verify_internal_token)])
+def bots_jobs_list(limit: int = 50, db: Session = Depends(get_db)):
+    jobs = db.query(BotJob).order_by(BotJob.created_at.desc()).limit(limit).all()
+    return [{
+        'id': j.id, 'created_at': j.created_at.isoformat(), 'input_original': j.input_original,
+        'tipo_identificado': j.tipo_identificado, 'status': j.status,
+        'resumo_humano': j.resumo_humano, 'proxima_acao': j.proxima_acao,
+    } for j in jobs]
+
+
+@app.get('/api/bots/jobs/{job_id}', dependencies=[Depends(verify_internal_token)])
+def bots_job_detail(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(BotJob).filter(BotJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f'Job {job_id} não encontrado.')
+    steps = db.query(BotStep).filter(BotStep.job_id == job_id).all()
+    return {
+        'id': job.id, 'created_at': job.created_at.isoformat(), 'updated_at': job.updated_at.isoformat(),
+        'input_original': job.input_original, 'tipo_identificado': job.tipo_identificado,
+        'objetivo': job.objetivo, 'status': job.status, 'resumo_humano': job.resumo_humano,
+        'proxima_acao': job.proxima_acao, 'raw': job.raw,
+        'steps': [{
+            'id': s.id, 'bot_name': s.bot_name, 'status': s.status,
+            'started_at': s.started_at.isoformat(), 'finished_at': s.finished_at.isoformat() if s.finished_at else None,
+            'resultado': s.resultado, 'warning': s.warning, 'erro': s.erro, 'next_action': s.next_action,
+        } for s in steps],
+    }
+
+
+@app.post('/api/bots/jobs/{job_id}/resume', dependencies=[Depends(verify_internal_token)])
+async def bots_job_resume(job_id: int, request: BotsResumeRequest, db: Session = Depends(get_db)):
+    """Retoma um job pausado num captcha (PortalBot). Recebe o texto que o
+    humano leu na imagem, digita e submete — nunca resolve o captcha
+    sozinho."""
+    job = db.query(BotJob).filter(BotJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f'Job {job_id} não encontrado.')
+    if job.status != 'waiting_user':
+        raise HTTPException(status_code=400, detail=f'Job {job_id} não está aguardando intervenção (status atual: {job.status}).')
+
+    step_pausado = db.query(BotStep).filter(BotStep.job_id == job_id, BotStep.status == 'waiting_user').first()
+    if not step_pausado or not (step_pausado.resultado or {}).get('session_id'):
+        raise HTTPException(status_code=400, detail='Não achei a sessão de navegador pausada pra este job.')
+
+    session_id = step_pausado.resultado['session_id']
+    bot_result = await PortalBot().resume(session_id, request.captcha_text)
+
+    step_pausado.status = bot_result.status
+    step_pausado.finished_at = datetime.now(timezone.utc)
+    step_pausado.resultado = bot_result.resultado
+    step_pausado.next_action = bot_result.next_action
+    job.status = 'completed' if bot_result.status == 'concluido' else 'partial'
+    job.proxima_acao = bot_result.next_action
+    db.commit()
+
+    return bot_result.as_dict()
+
+
+@app.get('/api/bots/status', dependencies=[Depends(verify_internal_token)])
+def bots_status_endpoint():
+    """Lista os bots que existem e o que cada um faz de verdade hoje."""
+    return {'bots': bots_runner.bots_status()}
 
 
 @app.post('/api/dossier', dependencies=[Depends(verify_internal_token)])
