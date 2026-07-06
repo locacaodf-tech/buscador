@@ -166,19 +166,11 @@ def _consultar_stj(tipo: str, valor: str) -> dict[str, Any]:
         }
 
     etapas.append(_etapa('STJ XLSX', 'concluido', f"{len(data['results'])} registro(s) encontrado(s)."))
+    from ..connectors.stj_precatorios import normalizar_registro_para_exibicao
     for r in data['results']:
-        resultados_confirmados.append({
-            'fonte': r.get('fonte'),
-            'sequencial': r.get('sequencial'),
-            'processo': r.get('numero_processo'),
-            'credor': r.get('credor_nome'),
-            'valor': r.get('valor'),
-            'previsao_pagamento': r.get('previsao_pagamento'),
-            'arquivo': r.get('arquivo_original'),
-            'aba': r.get('aba'),
-            'linha': r.get('linha_arquivo'),
-            'uploaded_at': r.get('uploaded_at'),
-        })
+        registro = normalizar_registro_para_exibicao(r)
+        registro['uploaded_at'] = r.get('uploaded_at')  # só existe no fluxo de upload manual
+        resultados_confirmados.append(registro)
     proxima_acao = 'Dado encontrado nos arquivos oficiais do STJ que você já carregou.'
     return {
         'etapas': etapas, 'resultados_confirmados': resultados_confirmados,
