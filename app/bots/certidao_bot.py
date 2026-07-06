@@ -3,6 +3,7 @@ linguagem humana (nunca nao_integrado, source_mapping_required, captcha_relay.py
 ou nome de variável de ambiente — tradutor único em status_em_portugues)."""
 from __future__ import annotations
 
+from typing import Any
 from .base import BaseBot, BotResult
 from ..services.certificate_center import build_certificate_plan
 
@@ -15,7 +16,7 @@ class CertidaoBot(BaseBot):
     def can_run(self, tipo_identificado: str, objetivo: str) -> bool:
         return objetivo == 'certidao' or tipo_identificado in {'cpf', 'cnpj'}
 
-    async def run(self, *, valor: str, uf: str | None, tribunal: str | None, objetivo: str) -> BotResult:
+    async def run(self, *, valor: str, uf: str | None, tribunal: str | None, objetivo: str, db: Any = None) -> BotResult:
         plano = build_certificate_plan(valor, None)
         steps = plano.get('steps', [])
 
