@@ -37,7 +37,7 @@ from ..config import get_settings
 class PortalBot(BaseBot):
     bot_id = 'portal_bot'
     nome = 'PortalBot'
-    finalidade = 'Abrir um portal público oficial, preencher campos e tentar consultar — pausa em captcha pra intervenção humana.'
+    finalidade = 'Mecanismo pronto, requer alvo configurado (URL + seletores de campo) — abre portal público oficial, preenche campos e tenta consultar; pausa em captcha pra intervenção humana.'
 
     def can_run(self, tipo_identificado: str, objetivo: str) -> bool:
         return False  # nunca acionado automaticamente pelo runner — precisa de url/fill_fields explícitos, chamado via run_com_alvo()
