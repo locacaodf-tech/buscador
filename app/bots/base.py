@@ -57,5 +57,5 @@ class BaseBot:
     def can_run(self, tipo_identificado: str, objetivo: str) -> bool:
         raise NotImplementedError
 
-    async def run(self, *, valor: str, uf: str | None, tribunal: str | None, objetivo: str) -> BotResult:
+    async def run(self, *, valor: str, uf: str | None, tribunal: str | None, objetivo: str, db: Any = None) -> BotResult:
         raise NotImplementedError
