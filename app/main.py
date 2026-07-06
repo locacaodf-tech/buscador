@@ -307,7 +307,7 @@ async def diligencia(request: DiligenciaRequest, db: Session = Depends(get_db)):
     resultado['diligencia_id'] = log.id
 
     if request.run_bots:
-        bots_resultado = await bots_runner.executar_bots(request.input, request.uf, request.tribunal, request.objetivo)
+        bots_resultado = await bots_runner.executar_bots(request.input, request.uf, request.tribunal, request.objetivo, db=db)
         job = BotJob(
             input_original=request.input, tipo_identificado=bots_resultado['tipo_identificado'],
             objetivo=request.objetivo, status=bots_resultado['status'],
@@ -427,7 +427,7 @@ async def bots_run(request: BotsRunRequest, db: Session = Depends(get_db)):
     ficou pendente. Se um bot pausar esperando validação humana (ex.:
     PortalBot num captcha), o job fica com status 'waiting_user' e pode ser
     retomado em POST /api/bots/jobs/{id}/resume."""
-    resultado = await bots_runner.executar_bots(request.input, request.uf, request.tribunal, request.objetivo)
+    resultado = await bots_runner.executar_bots(request.input, request.uf, request.tribunal, request.objetivo, db=db)
 
     if request.portal_url and request.portal_fill_fields and request.portal_submit_selector:
         portal_result = await PortalBot().run_com_alvo(
@@ -607,6 +607,28 @@ async def official_precatorio_browser_search(request: BrowserSearchRequest):
 
 
 CHROME_EXECUTABLE_PATH = settings.playwright_chrome_path or None
+
+
+@app.get('/api/stj-precatorios/official-files', dependencies=[Depends(verify_internal_token)])
+def stj_official_files_list(db: Session = Depends(get_db)):
+    """Lista os arquivos oficiais do STJ conhecidos/já baixados pelo StjBot."""
+    from .models import StjOfficialFile
+    arquivos = db.query(StjOfficialFile).order_by(StjOfficialFile.id.desc()).all()
+    return [{
+        'id': a.id, 'year': a.year, 'natureza': a.natureza, 'entidade_devedora': a.entidade_devedora,
+        'source_url': a.source_url, 'filename': a.original_filename,
+        'downloaded_at': a.downloaded_at.isoformat() if a.downloaded_at else None,
+        'row_count': a.row_count, 'status': a.status, 'error': a.error,
+    } for a in arquivos]
+
+
+@app.post('/api/stj-precatorios/sync', dependencies=[Depends(verify_internal_token)])
+async def stj_official_sync(db: Session = Depends(get_db)):
+    """Força o StjBot a buscar/baixar os arquivos oficiais públicos do STJ
+    agora — sem esperar upload manual. Se não conseguir acessar a página ou
+    baixar nenhum arquivo, devolve isso honestamente, sem fingir sucesso."""
+    from .services.stj_official_scraper import sync_official_files
+    return await sync_official_files(db)
 
 
 @app.post('/api/portal-automation/start', dependencies=[Depends(verify_internal_token)])
