@@ -50,7 +50,7 @@ def calcular_status_job(passos: list[dict[str, Any]]) -> str:
     return 'completed'
 
 
-async def executar_bots(input_texto: str, uf: str | None, tribunal: str | None, objetivo: str) -> dict[str, Any]:
+async def executar_bots(input_texto: str, uf: str | None, tribunal: str | None, objetivo: str, db: Any = None) -> dict[str, Any]:
     resolved = infer_identifier(input_texto)
     tipo = resolved.search_type
     valor = resolved.search_key
@@ -65,7 +65,7 @@ async def executar_bots(input_texto: str, uf: str | None, tribunal: str | None, 
         if not bot.can_run(tipo, objetivo):
             continue
         try:
-            resultado = await bot.run(valor=valor, uf=uf, tribunal=tribunal, objetivo=objetivo)
+            resultado = await bot.run(valor=valor, uf=uf, tribunal=tribunal, objetivo=objetivo, db=db)
         except Exception as exc:  # uma etapa falhando não derruba as demais
             passos.append({
                 'bot_id': bot_id, 'nome': bot.nome, 'status': 'falhou',
