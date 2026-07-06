@@ -110,6 +110,14 @@ def list_uploaded_files() -> list[UploadedFileInfo]:
     return out
 
 
+def has_uploaded_file() -> bool:
+    """Ponto único de verdade sobre 'o STJ já tem XLSX carregado nesta
+    sessão'. Usado tanto pelo motor de diligência quanto pelo endpoint de
+    plano de precatório, pra nunca dizer que o STJ 'já responde
+    automaticamente' quando, na prática, falta a planilha oficial."""
+    return len(list_uploaded_files()) > 0
+
+
 def inspect_workbook(content: bytes, original_filename: str = '') -> dict[str, Any]:
     """Raio-x do arquivo recém-enviado: abas, cabeçalho encontrado, campos
     detectados e quantas linhas foram lidas — sem precisar de search_key
