@@ -271,6 +271,46 @@ def test_dossie_do_job_mostra_url_oficial_consultada(tmp_path, monkeypatch):
     assert 'stj.jus.br' in dossie.text
 
 
+def test_dossie_mostra_todos_os_campos_uteis_do_stj(tmp_path, monkeypatch):
+    """Achado real de auditoria: o dossiê só mostrava parte dos campos que
+    o StjBot já tinha internamente (faltava processo, classe, previsão,
+    natureza, entidade devedora, ano) — corrigido normalizando os dois
+    fluxos (upload manual e sync automático) com a mesma função única."""
+    isolado = tmp_path / 'stj_uploads'
+    monkeypatch.setattr(stj_uploads, 'UPLOAD_DIR', isolado)
+    monkeypatch.setattr(stj_uploads, 'upload_dir', lambda: isolado)
+
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['Relação de Precatórios Expedidos - STJ'])
+    ws.append([])
+    ws.append(['Ordem', 'Classe', 'Sequencial', 'Processo', 'Credor/Beneficiário', 'Natureza', 'Entidade Devedora', 'Valor', 'Previsão'])
+    ws.append([1, 'PRC', 44556, '0506671-51.2025.3.00.0000', 'CREDOR TESTE COMPLETO', 'Alimentar', 'União', '999.888,77', 'janeiro/2027'])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    client = TestClient(app)
+    client.post('/api/stj-precatorios/upload-xlsx', files={'file': ('teste_completo.xlsx', buf.getvalue(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')})
+
+    resp = client.post('/api/bots/run', json={'input': '44556'})
+    job_id = resp.json()['job_id']
+    dossie = client.get(f'/api/bots/jobs/{job_id}/dossie')
+    assert dossie.status_code == 200
+    texto = dossie.text
+    # todos os campos pedidos precisam aparecer, com valor de verdade
+    assert '0506671-51.2025.3.00.0000' in texto  # processo/CNJ
+    assert 'PRC' in texto  # classe
+    assert 'CREDOR TESTE COMPLETO' in texto  # credor
+    assert '999.888' in texto or '999888' in texto  # valor
+    assert 'janeiro/2027' in texto  # previsão
+    assert 'Alimentar' in texto  # natureza
+    assert 'União' in texto  # entidade devedora
+    assert 'teste_completo.xlsx' in texto  # arquivo
+    assert 'Sheet' in texto  # aba
+    assert '44556' in texto  # sequencial
+
+
 # ---------------------------------------------------------------------------
 # Achado real testando: página com robots.txt bloqueado (como o TJPE) nunca
 # deveria ser um alvo — este teste documenta a checagem que EU fiz antes de
