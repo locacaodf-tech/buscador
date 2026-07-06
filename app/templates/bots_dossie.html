@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dossiê do job #{{ job.id }} — Bots executores</title>
+  <style>
+    :root { --navy: #0b1f3d; --ink: #1f2937; --ink-soft: #6b7280; --border: #e5e7eb; --success: #166534; --success-bg: #dcfce7; --warn-bg: #fef3c7; --fail-bg: #fee2e2; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--ink); background: #fff; margin: 0; padding: 24px; max-width: 800px; margin-inline: auto; line-height: 1.6; }
+    h1 { font-size: 22px; color: var(--navy); margin-bottom: 4px; }
+    .subtitulo { color: var(--ink-soft); font-size: 14px; margin-bottom: 20px; }
+    .status-geral { display: inline-block; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; margin-bottom: 20px; }
+    .status-completed { background: var(--success-bg); color: var(--success); }
+    .status-partial, .status-waiting_user { background: var(--warn-bg); color: #92400e; }
+    .status-failed { background: var(--fail-bg); color: #991b1b; }
+    section { margin-bottom: 20px; }
+    .rotulo-secao { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--navy); border-bottom: 2px solid var(--border); padding-bottom: 6px; margin-bottom: 10px; }
+    .step-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+    .step-nome { font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+    .step-status { font-size: 12px; padding: 3px 10px; border-radius: 999px; font-weight: 700; }
+    .step-detalhe { font-size: 14px; color: var(--ink-soft); margin-top: 6px; }
+    .vazio { color: var(--ink-soft); font-style: italic; font-size: 14px; }
+    .proxima-acao { background: var(--navy); color: #fff; padding: 16px 18px; border-radius: 12px; font-weight: 600; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <h1>Dossiê do job #{{ job.id }} — Bots executores</h1>
+  <p class="subtitulo">Gerado em {{ job.created_at.strftime('%d/%m/%Y %H:%M') }} UTC · Entrada: "{{ job.input_original }}" · Tipo: {{ job.tipo_identificado }}</p>
+  <span class="status-geral status-{{ job.status }}">{{ status_label }}</span>
+
+  <section>
+    <div class="rotulo-secao">Resumo</div>
+    <p>{{ job.resumo_humano or 'Sem resumo disponível.' }}</p>
+  </section>
+
+  <section>
+    <div class="rotulo-secao">Bots executados</div>
+    {% if steps %}
+      {% for s in steps %}
+      <div class="step-card">
+        <div class="step-nome">{{ s.bot_name }} <span class="step-status status-{{ s.status }}">{{ status_labels.get(s.status, s.status) }}</span></div>
+        {% if s.warning %}<div class="step-detalhe"><b>Aviso:</b> {{ s.warning }}</div>{% endif %}
+        {% if s.erro %}<div class="step-detalhe"><b>Erro:</b> {{ s.erro }}</div>{% endif %}
+        {% if s.evidence_id %}<div class="step-detalhe"><b>Evidência:</b> #{{ s.evidence_id }}</div>{% endif %}
+        {% if s.next_action %}<div class="step-detalhe"><b>Próxima ação:</b> {{ s.next_action }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="vazio">Nenhum bot foi acionado pra este dado.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <div class="rotulo-secao">Próxima ação recomendada</div>
+    <div class="proxima-acao">{{ job.proxima_acao or 'Nenhuma ação recomendada registrada.' }}</div>
+  </section>
+</body>
+</html>
