@@ -48,10 +48,17 @@
           <div class="step-detalhe">
             {% if r.fonte %}<b>Fonte:</b> {{ r.fonte }}<br>{% endif %}
             {% if r.fonte_url %}<b>URL oficial consultada:</b> {{ r.fonte_url }}<br>{% endif %}
-            {% if r.arquivo %}<b>Arquivo:</b> {{ r.arquivo }}{% if r.aba %} (aba {{ r.aba }}{% if r.linha %}, linha {{ r.linha }}{% endif %}){% endif %}<br>{% endif %}
             {% if r.sequencial %}<b>Sequencial:</b> {{ r.sequencial }}<br>{% endif %}
+            {% if r.processo %}<b>Processo/CNJ:</b> {{ r.processo }}<br>{% endif %}
+            {% if r.classe %}<b>Classe:</b> {{ r.classe }}<br>{% endif %}
             {% if r.credor %}<b>Credor:</b> {{ r.credor }}<br>{% endif %}
             {% if r.valor %}<b>Valor:</b> {{ r.valor }}<br>{% endif %}
+            {% if r.previsao_pagamento %}<b>Previsão de pagamento:</b> {{ r.previsao_pagamento }}<br>{% endif %}
+            {% if r.ano_orcamento %}<b>Ano-orçamento:</b> {{ r.ano_orcamento }}<br>{% endif %}
+            {% if r.ano_expedicao %}<b>Ano de expedição:</b> {{ r.ano_expedicao }}<br>{% endif %}
+            {% if r.natureza %}<b>Natureza:</b> {{ r.natureza }}<br>{% endif %}
+            {% if r.entidade_devedora %}<b>Entidade devedora:</b> {{ r.entidade_devedora }}<br>{% endif %}
+            {% if r.arquivo %}<b>Arquivo:</b> {{ r.arquivo }}{% if r.aba %} (aba {{ r.aba }}{% if r.linha %}, linha {{ r.linha }}{% endif %}){% endif %}<br>{% endif %}
           </div>
           {% endfor %}
         {% endif %}
