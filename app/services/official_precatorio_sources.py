@@ -558,3 +558,37 @@ def build_precatorio_route_plan(search_type: str, search_key: str, extra_params:
         'candidate_sources': [src.as_dict() for src in matched_sources],
         'disclaimer': 'Plano de busca. Resultados reais dependem de token, credencial, portal público, arquivo aberto ou implementação específica da fonte.',
     }
+
+
+def classificar_prontas_e_proxima_acao(candidatos: list[dict], faltando: list[str]) -> tuple[list[dict], str, list[str]]:
+    """Ponto único de verdade sobre quais fontes do plano de precatório
+    'já respondem automaticamente' — usado tanto por /api/diligencia quanto
+    por /api/official-precatorio/plan, pra nunca dizer que o STJ já é
+    automático quando falta o XLSX carregado nesta sessão (achado real de
+    auditoria: essa checagem existia só no JavaScript da tela, não no
+    backend, e cada endpoint calculava a 'próxima ação' de um jeito
+    separado — o mesmo bug podia (e apareceu) em mais de um lugar)."""
+    from . import stj_uploads
+    stj_carregado = stj_uploads.has_uploaded_file()
+
+    prontas: list[dict] = []
+    pendencias_extra: list[str] = []
+    for c in candidatos:
+        if c.get('integration_status') not in {'implemented', 'implemented_partial', 'implemented_configurable'}:
+            continue
+        eh_stj = 'stj' in (c.get('key') or c.get('source_id') or c.get('name') or '').lower()
+        if eh_stj and not stj_carregado:
+            pendencias_extra.append('STJ aguardando upload do XLSX oficial.')
+            continue
+        prontas.append(c)
+
+    if prontas:
+        proxima_acao = f'Comece pela fonte "{prontas[0].get("name")}", que já responde automaticamente.'
+    elif pendencias_extra:
+        proxima_acao = 'Carregue o XLSX oficial do STJ para destravar a consulta automática.'
+    elif faltando:
+        proxima_acao = f'Informe {faltando[0]} pra destravar mais fontes no plano.'
+    else:
+        proxima_acao = 'Confira as fontes oficiais sugeridas no plano — nenhuma automatizada ainda pra este caso.'
+
+    return prontas, proxima_acao, pendencias_extra
