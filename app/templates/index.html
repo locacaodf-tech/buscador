@@ -530,6 +530,8 @@
     <label for="buscaLivreInput">Busca livre de diligência</label>
     <input type="text" id="buscaLivreInput" class="simple-input" placeholder="CPF, CNPJ, nome, OAB, CNJ, precatório, RPV, requisitório ou sequencial" autocomplete="off" />
     <button class="simple-button" id="btnBuscaLivre" type="button">🔍 Identificar e buscar</button>
+    <button class="secondary" id="btnMandarBots" type="button" style="width:100%; margin-top:10px;">🤖 Mandar bots trabalharem</button>
+    <div id="botsResultado"></div>
     <div id="buscaLivreResultado"></div>
 
     <p class="simple-subtitle" style="margin-top:26px;">Ou vá direto pra um fluxo específico:</p>
@@ -1771,6 +1773,7 @@
     // está ativo evita dois elementos com o mesmo id no DOM ao mesmo tempo.
     if (idParaMostrar !== 'panelCnj' && el('cnjResultArea')) el('cnjResultArea').innerHTML = '';
     if (idParaMostrar !== 'simplePanel' && el('buscaLivreResultado')) el('buscaLivreResultado').innerHTML = '';
+    if (idParaMostrar !== 'simplePanel' && el('botsResultado')) el('botsResultado').innerHTML = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   document.querySelectorAll('[data-voltar]').forEach((link) => {
@@ -1918,6 +1921,98 @@
 
   el('btnBuscaLivre').addEventListener('click', handleBuscaLivre);
   el('buscaLivreInput').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') handleBuscaLivre(); });
+
+  // ---------- Bots executores (v30) ----------
+
+  async function handleMandarBots() {
+    const raw = el('buscaLivreInput').value.trim();
+    if (!raw) {
+      el('botsResultado').innerHTML = simpleMessage('Digite algum dado antes de mandar os bots trabalharem.', 'info');
+      return;
+    }
+    el('botsResultado').innerHTML = simpleLoading('Bots trabalhando...');
+    try {
+      const data = await apiFetch('/api/bots/run', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify({ input: raw, objetivo: 'completo' }) });
+      renderBotsResultado(data);
+    } catch (e) {
+      el('botsResultado').innerHTML = simpleMessage('Não consegui acionar os bots agora: ' + e.message, 'error');
+    }
+  }
+
+  const BOT_STATUS_LABEL = {
+    concluido: '✅ concluído', falhou: '❌ falhou', pendente: '⏳ pendente',
+    waiting_user: '🖐️ aguardando você', executando: '⏳ executando',
+  };
+  const BOT_STATUS_CLASS = {
+    concluido: 'disponivel', falhou: 'credencial', pendente: 'nao_automatizado', waiting_user: 'manual',
+  };
+
+  function renderBotsResultado(data) {
+    let html = '<div class="stj-result-card">';
+    html += campoResultado('Tipo identificado', data.tipo_identificado);
+    html += campoResultado('Status geral do job', data.status);
+    html += '</div>';
+
+    if (data.bots_executados && data.bots_executados.length) {
+      html += '<div class="plano-grupo"><div class="grupo-titulo">Bots acionados</div>';
+      data.bots_executados.forEach((b) => {
+        const cls = BOT_STATUS_CLASS[b.status] || 'nao_automatizado';
+        html += '<div class="plano-item ' + cls + '"><span>' + escapeHtml(b.nome) + '</span><span style="font-size:13px;">' + (BOT_STATUS_LABEL[b.status] || b.status) + '</span></div>';
+      });
+      html += '</div>';
+    }
+
+    if (data.resultados_confirmados && data.resultados_confirmados.length) {
+      data.resultados_confirmados.forEach((r) => {
+        html += '<div class="stj-result-card"><div class="stj-result-headline">✅ Confirmado</div>';
+        Object.entries(r).forEach(([chave, val]) => { if (val != null && val !== '') html += campoResultado(chave, val); });
+        html += '</div>';
+      });
+    }
+
+    if (data.pendencias && data.pendencias.length) {
+      html += '<div class="dados-faltantes-box"><b>Pendências:</b><br>' + data.pendencias.map((p) => '• ' + escapeHtml(p)).join('<br>') + '</div>';
+    }
+
+    // Se algum bot pausou num captcha, mostra a imagem + campo pra resolver.
+    const pausado = (data.bots_executados || []).find((b) => b.status === 'waiting_user' && b.captcha_image_base64);
+    if (pausado) {
+      html += '<div class="indicio-precatorio-box">';
+      html += '<div class="titulo">Validação manual necessária</div>';
+      html += '<img src="data:image/png;base64,' + pausado.captcha_image_base64 + '" alt="captcha" style="border-radius:8px; margin-bottom:10px;" />';
+      html += '<label for="botsCaptchaTexto">Digite o código da imagem</label>';
+      html += '<input type="text" id="botsCaptchaTexto" autocomplete="off" />';
+      html += '<button class="simple-button" type="button" id="btnResolverCaptcha" style="margin-top:10px;">Resolver e continuar</button>';
+      html += '</div>';
+    }
+
+    html += proximaAcaoBox(data.proxima_acao_recomendada || data.proxima_acao || '');
+
+    if (data.job_id) {
+      html += '<div class="dados-faltantes-box" style="background:var(--success-bg); border-color:#bfe3cd;">Job nº ' + data.job_id + ' salvo.</div>';
+    }
+
+    el('botsResultado').innerHTML = html;
+
+    const btnResolver = el('btnResolverCaptcha');
+    if (btnResolver) {
+      btnResolver.addEventListener('click', async () => {
+        const texto = el('botsCaptchaTexto').value.trim();
+        if (!texto) return;
+        el('botsResultado').innerHTML = simpleLoading('Enviando resposta...');
+        try {
+          const resumo = await apiFetch('/api/bots/jobs/' + data.job_id + '/resume', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify({ captcha_text: texto }) });
+          data.status = resumo.status === 'concluido' ? 'completed' : 'partial';
+          data.bots_executados = data.bots_executados.map((b) => b.bot_id === 'portal_bot' ? resumo : b);
+          data.proxima_acao_recomendada = resumo.next_action;
+          renderBotsResultado(data);
+        } catch (e) {
+          el('botsResultado').innerHTML = simpleMessage('Não consegui enviar: ' + e.message, 'error');
+        }
+      });
+    }
+  }
+  el('btnMandarBots').addEventListener('click', handleMandarBots);
 
   // Tradutor de jargão técnico -> linguagem operacional. Usado em toda
   // resposta que expõe integration_status/source_type de qualquer registry.
