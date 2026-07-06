@@ -244,6 +244,11 @@ class DiligenciaRequest(BaseModel):
     uf: str | None = None
     tribunal: str | None = None
     objetivo: Literal['completo', 'processo', 'precatorio', 'certidao'] = 'completo'
+    # Opcional (v30.1): se True, também aciona a camada de bots (mesmo
+    # runner de /api/bots/run) e devolve job_id junto — sem quebrar quem já
+    # chama /api/diligencia sem esse campo (default False = comportamento
+    # de sempre, inalterado).
+    run_bots: bool = False
 
     @field_validator('input', mode='before')
     @classmethod
