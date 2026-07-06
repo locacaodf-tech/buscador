@@ -375,6 +375,29 @@ def certificate_sources() -> dict[str, dict[str, Any]]:
     return {k: v.as_dict() for k, v in CERTIFICATE_SOURCE_REGISTRY.items()}
 
 
+STATUS_EM_PORTUGUES: dict[str, str] = {
+    'implemented': 'Consulta automática disponível.',
+    'implemented_partial': 'Consulta parcial disponível — nem todos os campos foram confirmados.',
+    'implemented_configurable': 'Pronta pra usar assim que a chave/contrato for configurado.',
+    'source_mapping_required': 'Fonte ainda não automatizada. Use o link oficial.',
+    'not_researched': 'Fonte ainda não pesquisada em detalhe — use o link oficial se precisar agora.',
+    'nao_integrado': 'Consulta manual por enquanto.',
+    'requer_api_contratada': 'Exige API contratada.',
+    'requer_manual': 'Consulta manual por enquanto.',
+    'requer_login': 'Exige login — use o link oficial.',
+    'requer_certificado_digital': 'Exige certificado digital — use o link oficial.',
+    'captcha_detectado': 'Exige validação manual/captcha.',
+}
+
+
+def status_em_portugues(status: str | None) -> str:
+    """Ponto único de tradução (backend) — espelha STATUS_EM_PORTUGUES do
+    JavaScript da tela. Existir aqui também garante que qualquer bot ou
+    cliente de API que não passe pela tela ainda recebe linguagem humana,
+    nunca o valor técnico cru."""
+    return STATUS_EM_PORTUGUES.get(status or '', 'Status não automatizado — confira o link oficial.')
+
+
 def build_certificate_plan(document: str | None, certificate_types: list[str] | None = None) -> dict[str, Any]:
     """Monta o plano de emissão por camadas para um documento, sem executar nada."""
     wanted = set(certificate_types or [])
@@ -387,6 +410,7 @@ def build_certificate_plan(document: str | None, certificate_types: list[str] | 
             'name': source.name,
             'certificate_types': list(source.certificate_types),
             'integration_status': source.integration_status,
+            'status_humano': status_em_portugues(source.integration_status),
             'ready_to_execute': source.integration_status == 'implemented_configurable',
             'blockers': [b for b in [
                 'requer contrato de API (Serpro)' if source.requires_api_contract else None,
