@@ -43,6 +43,25 @@
         <div class="step-nome">{{ s.bot_name }} <span class="step-status status-{{ s.status }}">{{ status_labels.get(s.status, s.status) }}</span></div>
         {% if s.warning %}<div class="step-detalhe"><b>Aviso:</b> {{ s.warning }}</div>{% endif %}
         {% if s.erro %}<div class="step-detalhe"><b>Erro:</b> {{ s.erro }}</div>{% endif %}
+        {% if s.resultado and s.resultado.resultados_confirmados %}
+          {% for r in s.resultado.resultados_confirmados %}
+          <div class="step-detalhe">
+            {% if r.fonte %}<b>Fonte:</b> {{ r.fonte }}<br>{% endif %}
+            {% if r.fonte_url %}<b>URL oficial consultada:</b> {{ r.fonte_url }}<br>{% endif %}
+            {% if r.arquivo %}<b>Arquivo:</b> {{ r.arquivo }}{% if r.aba %} (aba {{ r.aba }}{% if r.linha %}, linha {{ r.linha }}{% endif %}){% endif %}<br>{% endif %}
+            {% if r.sequencial %}<b>Sequencial:</b> {{ r.sequencial }}<br>{% endif %}
+            {% if r.credor %}<b>Credor:</b> {{ r.credor }}<br>{% endif %}
+            {% if r.valor %}<b>Valor:</b> {{ r.valor }}<br>{% endif %}
+          </div>
+          {% endfor %}
+        {% endif %}
+        {% if s.resultado and s.resultado.tentativa_sync and s.resultado.tentativa_sync.arquivos_processados %}
+          <div class="step-detalhe"><b>Arquivos oficiais consultados nesta tentativa:</b>
+          {% for a in s.resultado.tentativa_sync.arquivos_processados %}
+            <br>• {{ a.filename }} ({{ a.status }}) — {{ a.url }}
+          {% endfor %}
+          </div>
+        {% endif %}
         {% if s.evidence_id %}<div class="step-detalhe"><b>Evidência:</b> #{{ s.evidence_id }}</div>{% endif %}
         {% if s.next_action %}<div class="step-detalhe"><b>Próxima ação:</b> {{ s.next_action }}</div>{% endif %}
       </div>
