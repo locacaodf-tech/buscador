@@ -217,6 +217,34 @@ def parse_workbook_bytes(content: bytes, file_meta: dict[str, Any], fonte_url: s
     return records
 
 
+def normalizar_registro_para_exibicao(r: dict[str, Any], fonte_padrao: str | None = None) -> dict[str, Any]:
+    """Ponto único de normalização do registro STJ pra exibição (tela e
+    dossiê) — usado tanto pelo fluxo de upload manual quanto pelo sync
+    automático do StjBot. Achado real de auditoria: os dois fluxos
+    normalizavam campos parecidos mas incompletos, cada um do seu jeito, e
+    o dossiê só mostrava o que a normalização deixava passar — nunca todos
+    os campos que o parser já extrai (classe, natureza, entidade devedora,
+    ano). Centralizar aqui evita esse gap se repetir uma terceira vez."""
+    return {
+        'fonte': r.get('fonte') or fonte_padrao,
+        'sequencial': r.get('sequencial'),
+        'processo': r.get('numero_processo'),
+        'classe': r.get('classe'),
+        'credor': r.get('credor_nome'),
+        'valor': r.get('valor'),
+        'previsao_pagamento': r.get('previsao_pagamento'),
+        'natureza': r.get('natureza'),
+        'entidade_devedora': r.get('entidade_devedora'),
+        'ano_orcamento': r.get('ano_orcamento'),
+        'ano_expedicao': r.get('ano_expedicao'),
+        'arquivo': r.get('arquivo_original') or (r.get('fonte_url', '') or '').rsplit('/', 1)[-1] or None,
+        'aba': r.get('aba'),
+        'linha': r.get('linha_arquivo'),
+        'fonte_url': r.get('fonte_url'),
+        'uploaded_at': r.get('uploaded_at'),
+    }
+
+
 def match_records(records: list[dict[str, Any]], search_type: str, key: str, ano_filtro: Any = None) -> list[dict[str, Any]]:
     """Filtra registros já parseados pelo identificador buscado. Função de
     módulo, reutilizada pela busca online e pela busca em arquivo carregado."""
