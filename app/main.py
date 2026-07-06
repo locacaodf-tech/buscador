@@ -252,20 +252,15 @@ def official_precatorio_plan(request: OfficialPrecatorioPlanRequest, db: Session
     plano = build_precatorio_route_plan(search_type, search_key, request.extra_params)
 
     candidatos = plano.get('candidate_sources') or []
-    prontas = [c for c in candidatos if c.get('integration_status') in {'implemented', 'implemented_partial', 'implemented_configurable'}]
     faltando = plano.get('missing_recommended_fields') or []
-    if prontas:
-        proxima_acao = f'Comece pela fonte "{prontas[0].get("name")}", que já responde automaticamente.'
-    elif faltando:
-        proxima_acao = f'Informe {faltando[0]} pra destravar mais fontes no plano.'
-    else:
-        proxima_acao = 'Confira as fontes oficiais sugeridas no plano.'
+    from .services.official_precatorio_sources import classificar_prontas_e_proxima_acao
+    prontas, proxima_acao, pendencias_stj = classificar_prontas_e_proxima_acao(candidatos, faltando)
 
     log = _salvar_diligencia(
         db, input_original=search_key, tipo_identificado=search_type, valor_normalizado=search_key,
         objetivo='precatorio', resumo_humano=f'{len(candidatos)} fonte(s) candidata(s) mapeada(s) no plano.',
         proxima_acao_recomendada=proxima_acao,
-        pendencias=[f'Informe {c} para restringir melhor o plano.' for c in faltando],
+        pendencias=[f'Informe {c} para restringir melhor o plano.' for c in faltando] + pendencias_stj,
         fontes_manuais_recomendadas=[{'fonte': c.get('name'), 'acao': 'Abrir link oficial'} for c in candidatos if c.get('official_url')],
         raw_avancado=plano,
     )
