@@ -225,13 +225,10 @@ def _consultar_precatorio(tipo: str, valor: str, uf: str | None, tribunal: str |
     etapas.append(_etapa('Plano de precatório/RPV', 'concluido', f'{len(candidatos)} fonte(s) candidata(s) mapeada(s).'))
 
     pendencias = [f'Informe {campo} para restringir melhor o plano.' for campo in faltando]
-    prontas = [c for c in candidatos if c.get('integration_status') in {'implemented', 'implemented_partial', 'implemented_configurable'}]
-    if prontas:
-        proxima_acao = f'Comece pela fonte "{prontas[0].get("name")}", que já responde automaticamente.'
-    elif faltando:
-        proxima_acao = f'Informe {faltando[0]} pra destravar mais fontes no plano.'
-    else:
-        proxima_acao = 'Confira as fontes oficiais sugeridas no plano — nenhuma automatizada ainda pra este caso.'
+
+    from .official_precatorio_sources import classificar_prontas_e_proxima_acao
+    prontas, proxima_acao, pendencias_stj = classificar_prontas_e_proxima_acao(candidatos, faltando)
+    pendencias += pendencias_stj
 
     return {'etapas': etapas, 'pendencias': pendencias, 'proxima_acao': proxima_acao, 'raw': plano}
 
