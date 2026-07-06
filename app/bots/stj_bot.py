@@ -56,19 +56,13 @@ class StjBot(BaseBot):
             # Sincronizou com sucesso — busca já nos dados recém-baixados,
             # sem precisar que o usuário carregue nada.
             registros = registros_de_arquivos_baixados(db)
-            from ..connectors.stj_precatorios import match_records
+            from ..connectors.stj_precatorios import match_records, normalizar_registro_para_exibicao
             brutos = match_records(registros, tipo_busca, valor)
             # Mesma normalização de campos que _consultar_stj usa pro fluxo
             # manual — sem isso, o dossiê e a tela recebiam nomes de campo
             # diferentes conforme o dado veio de upload manual ou sync
             # automático (achado real testando o dossiê).
-            encontrados = [{
-                'fonte': 'STJ - baixado automaticamente da página oficial',
-                'sequencial': r.get('sequencial'), 'processo': r.get('numero_processo'),
-                'credor': r.get('credor_nome'), 'valor': r.get('valor'),
-                'previsao_pagamento': r.get('previsao_pagamento'), 'arquivo': r.get('fonte_url', '').rsplit('/', 1)[-1],
-                'aba': r.get('aba'), 'linha': r.get('linha_arquivo'), 'fonte_url': r.get('fonte_url'),
-            } for r in brutos]
+            encontrados = [normalizar_registro_para_exibicao(r, fonte_padrao='STJ - baixado automaticamente da página oficial') for r in brutos]
             status = 'concluido'
             return BotResult(
                 bot_id=self.bot_id, nome=self.nome, status=status,
