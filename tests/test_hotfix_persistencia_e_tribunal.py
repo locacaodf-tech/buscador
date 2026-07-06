@@ -118,3 +118,79 @@ def test_diagnostico_stj_reflete_upload_real(tmp_path, monkeypatch):
     client.post('/api/stj-precatorios/upload-xlsx', files={'file': ('t.xlsx', _xlsx_simples(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')})
     resp2 = client.get('/api/diagnostico')
     assert resp2.json()['stj']['arquivo_carregado'] is True
+
+
+# ---------------------------------------------------------------------------
+# Achado real da segunda rodada de auditoria: o backend (diligencia_engine e
+# /api/official-precatorio/plan) dizia que o STJ "já responde
+# automaticamente" mesmo sem XLSX carregado — a checagem só existia no
+# JavaScript da tela, não no motor em si. Qualquer cliente chamando a API
+# direto (sem passar pela tela) recebia informação errada.
+# ---------------------------------------------------------------------------
+
+def test_diligencia_engine_nao_promete_stj_automatico_sem_xlsx(tmp_path, monkeypatch):
+    import asyncio
+    from app.services import stj_uploads
+    from app.services.diligencia_engine import run_diligencia
+
+    isolado = tmp_path / 'stj_uploads'
+    monkeypatch.setattr(stj_uploads, 'UPLOAD_DIR', isolado)
+    monkeypatch.setattr(stj_uploads, 'upload_dir', lambda: isolado)
+
+    r = asyncio.run(run_diligencia('PRC 123456', objetivo='precatorio'))
+    assert 'já responde automaticamente' not in r['proxima_acao_recomendada']
+    assert 'STJ' in r['proxima_acao_recomendada']
+    assert any('STJ aguardando upload' in p for p in r['pendencias'])
+
+
+def test_diligencia_engine_promete_stj_automatico_com_xlsx_de_verdade(tmp_path, monkeypatch):
+    import asyncio
+    import io
+    from openpyxl import Workbook
+    from app.services import stj_uploads
+    from app.services.diligencia_engine import run_diligencia
+
+    isolado = tmp_path / 'stj_uploads'
+    isolado.mkdir(parents=True)
+    monkeypatch.setattr(stj_uploads, 'UPLOAD_DIR', isolado)
+    monkeypatch.setattr(stj_uploads, 'upload_dir', lambda: isolado)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['Relação de Precatórios Expedidos - STJ'])
+    buf = io.BytesIO()
+    wb.save(buf)
+    (isolado / '20260705T000000Z__teste.xlsx').write_bytes(buf.getvalue())
+
+    r = asyncio.run(run_diligencia('PRC 123456', objetivo='precatorio'))
+    assert 'já responde automaticamente' in r['proxima_acao_recomendada']
+    assert not any('STJ aguardando upload' in p for p in r['pendencias'])
+
+
+def test_endpoint_plano_precatorio_tambem_respeita_estado_real_do_stj(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.services import stj_uploads
+
+    isolado = tmp_path / 'stj_uploads'
+    monkeypatch.setattr(stj_uploads, 'UPLOAD_DIR', isolado)
+    monkeypatch.setattr(stj_uploads, 'upload_dir', lambda: isolado)
+
+    client = TestClient(app)
+    resp = client.post('/api/official-precatorio/plan', json={'search_type': 'precatorio_number', 'search_key': '123456'})
+    log = client.get(f"/api/diligencias/{resp.json()['diligencia_id']}").json()
+    assert 'já responde automaticamente' not in log['proxima_acao_recomendada']
+    assert any('STJ aguardando upload' in p for p in log['pendencias'])
+
+
+def test_engine_e_endpoint_de_plano_usam_a_mesma_funcao_compartilhada():
+    """Garante que a lógica não fica duplicada de novo em dois lugares —
+    exatamente o que causou esse bug reaparecer depois do primeiro hotfix."""
+    import inspect
+    from app.services import diligencia_engine
+    import app.main as main_module
+
+    fonte_engine = inspect.getsource(diligencia_engine._consultar_precatorio)
+    fonte_endpoint = inspect.getsource(main_module.official_precatorio_plan)
+    assert 'classificar_prontas_e_proxima_acao' in fonte_engine
+    assert 'classificar_prontas_e_proxima_acao' in fonte_endpoint
