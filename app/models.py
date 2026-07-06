@@ -103,3 +103,43 @@ class DiligenciaLog(Base):
     pendencias: Mapped[list | None] = mapped_column(JSON, nullable=True)
     fontes_manuais_recomendadas: Mapped[list | None] = mapped_column(JSON, nullable=True)
     raw_avancado: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class BotJob(Base):
+    """Um job de execução dos bots (v30) — snapshot completo de uma
+    diligência processada pela camada de bots, com visibilidade de cada
+    etapa (ver BotStep). Não é uma fila assíncrona com workers separados
+    (este é um FastAPI síncrono) — é execução dentro da própria requisição,
+    registrada aqui pra dar rastreabilidade e permitir retomar quando um
+    bot específico (o PortalBot) pausa esperando intervenção humana."""
+
+    __tablename__ = 'bot_jobs'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    input_original: Mapped[str] = mapped_column(String(500), nullable=False)
+    tipo_identificado: Mapped[str] = mapped_column(String(50), nullable=False)
+    objetivo: Mapped[str] = mapped_column(String(30), nullable=False, default='completo')
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default='pending')  # pending|running|partial|completed|failed|waiting_user
+    resumo_humano: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proxima_acao: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class BotStep(Base):
+    """Uma etapa (um bot específico) dentro de um BotJob."""
+
+    __tablename__ = 'bot_steps'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    job_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    bot_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resultado: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    warning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    erro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
