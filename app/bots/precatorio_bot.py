@@ -3,6 +3,7 @@ Reaproveita _consultar_precatorio do motor — inclui a correção mais recente
 (STJ só conta como "pronto" se o XLSX estiver de fato carregado)."""
 from __future__ import annotations
 
+from typing import Any
 from .base import BaseBot, BotResult
 from ..services import diligencia_engine
 
@@ -15,7 +16,7 @@ class PrecatorioBot(BaseBot):
     def can_run(self, tipo_identificado: str, objetivo: str) -> bool:
         return tipo_identificado in {'precatorio_number', 'rpv_number', 'requisitorio_number', 'unknown'} or objetivo == 'precatorio'
 
-    async def run(self, *, valor: str, uf: str | None, tribunal: str | None, objetivo: str) -> BotResult:
+    async def run(self, *, valor: str, uf: str | None, tribunal: str | None, objetivo: str, db: Any = None) -> BotResult:
         tipo = 'precatorio_number'
         parte = diligencia_engine._consultar_precatorio(tipo, valor, uf, tribunal)
         plano = parte.get('raw', {})
