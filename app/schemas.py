@@ -249,3 +249,31 @@ class DiligenciaRequest(BaseModel):
     @classmethod
     def strip_input(cls, value):
         return value.strip() if isinstance(value, str) else value
+
+
+class BotsRunRequest(BaseModel):
+    """Requisição da camada de bots executores (v30)."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    input: str
+    uf: str | None = None
+    tribunal: str | None = None
+    objetivo: Literal['completo', 'processo', 'precatorio', 'certidao'] = 'completo'
+    # Opcional: aciona o PortalBot contra um alvo real (URL + seletores).
+    # Sem isso, o PortalBot não roda sozinho — ele precisa de seletores de
+    # campo confirmados por quem tem acesso de navegador ao portal (ver
+    # app/bots/portal_bot.py para o porquê disso ser deliberado).
+    portal_url: str | None = None
+    portal_fill_fields: dict[str, str] | None = None
+    portal_submit_selector: str | None = None
+    portal_source_id: str | None = None
+
+    @field_validator('input', mode='before')
+    @classmethod
+    def strip_input(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class BotsResumeRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    captcha_text: str
