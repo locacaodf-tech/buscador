@@ -39,6 +39,12 @@ SINAIS_TRABALHISTA = [
     ('anistia', 'sentenca_favoravel'),
     ('diferenças salariais', 'sentenca_favoravel'), ('diferencas salariais', 'sentenca_favoravel'),
     ('verbas vencidas', 'sentenca_favoravel'),
+    ('horas extras', 'credito_judicial_potencial'),
+    ('servidor público', 'credito_judicial_potencial'), ('servidor publico', 'credito_judicial_potencial'),
+    ('quinquênio', 'credito_judicial_potencial'), ('quinquenio', 'credito_judicial_potencial'),
+    ('adicional', 'credito_judicial_potencial'),
+    ('progressão', 'credito_judicial_potencial'), ('progressao', 'credito_judicial_potencial'),
+    ('retroativo', 'credito_judicial_potencial'),
 ]
 
 ENTES_DEVEDORES = ['INSS', 'União', 'Fazenda Pública', 'Fazenda Nacional', 'Estado de', 'Município de', 'Governo do Estado']
