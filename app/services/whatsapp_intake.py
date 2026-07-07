@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ..utils.cnj import normalize_cnj, format_cnj, infer_tribunal_from_cnj
+from ..utils.cnj import normalize_cnj, format_cnj, infer_tribunal_from_cnj, split_cnj_suffix
 from ..utils.cpf import only_digits, mask_document
 
 # ---------------------------------------------------------------------------
@@ -111,17 +111,21 @@ def _remover_acentos(texto: str) -> str:
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
 
-def extrair_cnj_candidatos(texto: str) -> list[str]:
+def extrair_cnj_candidatos(texto: str) -> list[dict[str, Any]]:
     """Acha número CNJ dentro de texto livre, mesmo mal formatado (com
-    ponto em vez de hífen, sem nenhuma pontuação, etc.) — busca qualquer
-    sequência de 20 dígitos, ignorando pontuação no meio."""
+    ponto em vez de hífen, sem nenhuma pontuação, ou com sufixo/incidente
+    tipo '/01' no final — achado real: um CNJ com sufixo colado batia 22
+    dígitos, não 20, e ficava invisível pro reconhecedor). Devolve lista
+    de dicts com 'cnj' (só os 20 dígitos) e 'sufixo' (ou None)."""
+    from ..utils.cnj import split_cnj_suffix
     candidatos = []
-    # Primeiro tenta o padrão formatado clássico (com ou sem pontuação
-    # correta), depois cai pro fallback de "20 dígitos em sequência".
-    for match in re.finditer(r'[\d][\d.\-/\s]{18,30}[\d]', texto):
-        digitos = only_digits(match.group(0))
-        if len(digitos) == 20 and digitos not in candidatos:
-            candidatos.append(digitos)
+    vistos = set()
+    for match in re.finditer(r'[\d][\d.\-/\s]{18,34}[\d]', texto):
+        base, sufixo = split_cnj_suffix(match.group(0))
+        digitos = only_digits(base)
+        if len(digitos) == 20 and digitos not in vistos:
+            vistos.add(digitos)
+            candidatos.append({'cnj': digitos, 'sufixo': sufixo})
     return candidatos
 
 
@@ -246,11 +250,12 @@ def mascarar_documentos_no_texto(texto: str) -> str:
     # devolve ao final, intacto, no lugar exato de onde saiu.
     protegido = texto
     marcadores: dict[str, str] = {}
-    for i, cnj_raw in enumerate(cnj_candidatos):
+    for i, candidato in enumerate(cnj_candidatos):
         marcador = f'\x00CNJ{i}\x00'
-        # acha o trecho exato (com pontuação original, se houver) que gerou esse CNJ
-        for match in re.finditer(r'[\d][\d.\-/\s]{18,30}[\d]', protegido):
-            if only_digits(match.group(0)) == cnj_raw and match.group(0) not in marcadores.values():
+        # acha o trecho exato (com pontuação e sufixo originais, se houver) que gerou esse CNJ
+        for match in re.finditer(r'[\d][\d.\-/\s]{18,34}[\d]', protegido):
+            base, _ = split_cnj_suffix(match.group(0))
+            if only_digits(base) == candidato['cnj'] and match.group(0) not in marcadores.values():
                 marcadores[marcador] = match.group(0)
                 protegido = protegido.replace(match.group(0), marcador, 1)
                 break
@@ -270,6 +275,110 @@ def mascarar_documentos_no_texto(texto: str) -> str:
     return resultado
 
 
+# ---------------------------------------------------------------------------
+# v31e/v31f: classe do documento, processo referência, requisitório/
+# precatório, e sinalizadores processuais bem delimitados (presença de
+# frase específica) — não tentei extrair "advogados" por nome livre, já
+# que isso é bem mais arriscado de acertar por regex do que os campos
+# abaixo (todos têm um marcador textual claro: uma palavra-chave, um
+# rótulo antes do valor, ou uma frase fixa).
+# ---------------------------------------------------------------------------
+
+CLASSES_DOCUMENTO_CONHECIDAS = [
+    ('ação rescisória', 'Ação Rescisória'),
+    ('acao rescisoria', 'Ação Rescisória'),
+    ('cumprimento de sentença', 'Cumprimento de Sentença'),
+    ('cumprimento de sentenca', 'Cumprimento de Sentença'),
+    ('ofício requisitório', 'Ofício Requisitório'),
+    ('oficio requisitorio', 'Ofício Requisitório'),
+    ('precatório', 'Precatório'),
+    ('precatorio', 'Precatório'),
+    ('rpv', 'RPV'),
+    ('requisição de pequeno valor', 'RPV'),
+    ('incidente', 'Incidente'),
+    ('agravo', 'Agravo'),
+    ('recurso especial', 'Recurso Especial'),
+    ('recurso extraordinário', 'Recurso Extraordinário'),
+    ('recurso', 'Recurso'),
+    ('execução', 'Execução'),
+    ('execucao', 'Execução'),
+]
+
+PALAVRAS_CHAVE_REQUISITORIO_PRECATORIO = [
+    'ofício requisitório', 'oficio requisitorio', 'precatório', 'precatorio', 'rpv', 'depre',
+    'fazenda pública', 'fazenda publica', 'valor global da requisição', 'valor global da requisicao',
+    'natureza do crédito', 'natureza do credito', 'trânsito em julgado', 'transito em julgado',
+]
+
+
+def detectar_classe_documento(texto: str) -> str | None:
+    """Detecta o tipo/classe do documento por palavra-chave — sempre a
+    PRIMEIRA classe encontrada na ordem da lista (mais específica primeiro:
+    'ação rescisória' antes de 'recurso' genérico, por exemplo)."""
+    texto_norm = _remover_acentos(texto.lower())
+    for chave, rotulo in CLASSES_DOCUMENTO_CONHECIDAS:
+        if _remover_acentos(chave) in texto_norm:
+            return rotulo
+    return None
+
+
+def eh_documento_requisitorio_ou_precatorio(texto: str) -> bool:
+    """True se o texto tiver pelo menos uma das palavras-chave que
+    normalmente aparecem em ofício requisitório / precatório / RPV —
+    usado pra saber se, mesmo sem retorno no DataJud, a próxima ação deve
+    apontar pro órgão de precatórios do tribunal, não um erro genérico."""
+    texto_norm = _remover_acentos(texto.lower())
+    return any(_remover_acentos(chave) in texto_norm for chave in PALAVRAS_CHAVE_REQUISITORIO_PRECATORIO)
+
+
+def extrair_processo_referencia(texto: str) -> dict[str, Any] | None:
+    """Acha 'processo referência: NNNNNNN...' (ou 'processo de referência')
+    e devolve o CNJ (base + sufixo, igual ao processo principal). Sem
+    isso, um documento de ação rescisória ou incidente que cita o
+    processo original perdia essa informação por completo."""
+    match = re.search(
+        r'processo\s+(?:de\s+)?refer[êe]ncia\s*[:\s]+([\d][\d.\-/\s]{18,34}[\d])',
+        texto, re.IGNORECASE,
+    )
+    if not match:
+        return None
+    base, sufixo = split_cnj_suffix(match.group(1))
+    digitos = only_digits(base)
+    if len(digitos) != 20:
+        return None
+    return {'cnj': digitos, 'sufixo': sufixo}
+
+
+def extrair_valor_causa(texto: str) -> str | None:
+    """Acha 'valor da causa: R$ X' ou 'valor global da requisição: R$ X' —
+    reaproveita o mesmo padrão de valor monetário em reais, só muda o
+    rótulo procurado antes do valor."""
+    match = re.search(
+        r'valor\s+(?:da\s+causa|global\s+da\s+requisi[çc][ãa]o)\s*[:\s]+R?\$?\s*([\d.,]+)',
+        texto, re.IGNORECASE,
+    )
+    return match.group(1).strip() if match else None
+
+
+def extrair_orgao_julgador(texto: str) -> str | None:
+    """Heurística simples: texto que aparece logo depois de 'órgão
+    julgador' (com ou sem dois-pontos), até o próximo ponto final ou fim
+    da linha."""
+    match = re.search(r'[óo]rg[ãa]o\s+julgador\s*[:\s]+([^\n.]{3,80})', texto, re.IGNORECASE)
+    return match.group(1).strip() if match else None
+
+
+def detectar_flags_processuais(texto: str) -> dict[str, bool]:
+    """Sinalizadores booleanos — presença de frase específica, nunca um
+    palpite: segredo de justiça, justiça gratuita, pedido liminar."""
+    texto_norm = _remover_acentos(texto.lower())
+    return {
+        'segredo_de_justica': 'segredo de justica' in texto_norm,
+        'justica_gratuita': 'justica gratuita' in texto_norm or 'gratuidade de justica' in texto_norm,
+        'pedido_liminar': 'liminar' in texto_norm,
+    }
+
+
 def processar_mensagem(texto: str) -> dict[str, Any]:
     """Ponto único de entrada: recebe o texto colado e devolve tudo
     estruturado — dados extraídos, CNJ normalizado + tribunal provável,
@@ -283,33 +392,51 @@ def processar_mensagem(texto: str) -> dict[str, Any]:
     # verdade: "00007659720235070016" continha um CPF "válido" por
     # coincidência de dígitos, mas não era um CPF de verdade).
     texto_sem_cnj = texto
-    for cnj_raw in cnj_candidatos:
-        texto_sem_cnj = re.sub(re.escape(cnj_raw), '', texto_sem_cnj)
-        # também remove a versão pontuada, caso o texto original já viesse formatado
-        texto_sem_cnj = re.sub(r'[\d][\d.\-/\s]{18,30}[\d]', lambda m: '' if only_digits(m.group(0)) == cnj_raw else m.group(0), texto_sem_cnj)
+    for candidato in cnj_candidatos:
+        texto_sem_cnj = re.sub(r'[\d][\d.\-/\s]{18,34}[\d]', lambda m: '' if only_digits(split_cnj_suffix(m.group(0))[0]) == candidato['cnj'] else m.group(0), texto_sem_cnj)
 
     cpf = extrair_cpf(texto_sem_cnj)
     cnpj = extrair_cnpj(texto_sem_cnj)
     nome = extrair_nome(texto)
     cidade_uf = extrair_cidade_uf(texto)
     ente_devedor = extrair_ente_devedor(texto)
+    classe_documento = detectar_classe_documento(texto)
+    eh_requisitorio_precatorio = eh_documento_requisitorio_ou_precatorio(texto)
+    valor_causa = extrair_valor_causa(texto)
+    orgao_julgador = extrair_orgao_julgador(texto)
+    flags = detectar_flags_processuais(texto)
+    processo_referencia = extrair_processo_referencia(texto)
 
     processos_detectados = []
     divergencias = []
-    for cnj_raw in cnj_candidatos:
-        analise = analisar_cnj(cnj_raw)
+    cnj_da_referencia = processo_referencia['cnj'] if processo_referencia else None
+    for candidato in cnj_candidatos:
+        if candidato['cnj'] == cnj_da_referencia:
+            continue  # já aparece na seção própria de processo_referencia, não duplica aqui
+        analise = analisar_cnj(candidato['cnj'])
         processos_detectados.append({
-            'cnj_original': cnj_raw,
-            'cnj_normalizado': format_cnj(cnj_raw),
+            'cnj_original': candidato['cnj'],
+            'cnj_normalizado': format_cnj(candidato['cnj']),
+            'sufixo': candidato['sufixo'],
             **analise,
         })
         uf_mencionada = cidade_uf.get('uf')
         if uf_mencionada and analise['ufs_cobertas'] and uf_mencionada not in analise['ufs_cobertas']:
             divergencias.append(
-                f"Você mencionou {uf_mencionada}, mas o número {format_cnj(cnj_raw)} indica "
+                f"Você mencionou {uf_mencionada}, mas o número {format_cnj(candidato['cnj'])} indica "
                 f"{analise['tribunal_provavel']} ({analise['segmento_nome']}), que cobre "
                 f"{', '.join(analise['ufs_cobertas'])} — não {uf_mencionada}."
             )
+
+    processo_referencia_detalhado = None
+    if processo_referencia:
+        analise_ref = analisar_cnj(processo_referencia['cnj'])
+        processo_referencia_detalhado = {
+            'cnj_original': processo_referencia['cnj'],
+            'cnj_normalizado': format_cnj(processo_referencia['cnj']),
+            'sufixo': processo_referencia['sufixo'],
+            **analise_ref,
+        }
 
     dados_faltantes = []
     if not cnj_candidatos:
@@ -329,7 +456,15 @@ def processar_mensagem(texto: str) -> dict[str, Any]:
         'cidade': cidade_uf.get('cidade'),
         'uf': cidade_uf.get('uf'),
         'ente_devedor': ente_devedor,
+        'classe_documento': classe_documento,
+        'eh_requisitorio_ou_precatorio': eh_requisitorio_precatorio,
+        'valor_causa': valor_causa,
+        'orgao_julgador': orgao_julgador,
+        'segredo_de_justica': flags['segredo_de_justica'],
+        'justica_gratuita': flags['justica_gratuita'],
+        'pedido_liminar': flags['pedido_liminar'],
         'processos_detectados': processos_detectados,
+        'processo_referencia': processo_referencia_detalhado,
         'divergencias': divergencias,
         'dados_faltantes': dados_faltantes,
     }
@@ -338,6 +473,22 @@ def processar_mensagem(texto: str) -> dict[str, Any]:
 def gerar_resposta_sugerida(dados: dict[str, Any]) -> str:
     """Monta uma sugestão de resposta pro cliente — sempre um rascunho pra
     revisar antes de enviar, nunca envio automático."""
+    if dados.get('classe_documento') == 'Ação Rescisória' and dados.get('processo_referencia'):
+        ref = dados['processo_referencia']['cnj_normalizado']
+        return (
+            'Identificamos que o documento se refere a uma ação rescisória'
+            + (f' no {dados["processos_detectados"][0]["tribunal_provavel"]}' if dados.get('processos_detectados') and dados['processos_detectados'][0].get('tribunal_provavel') else '')
+            + f' e menciona processo referência ({ref}). Vamos analisar o processo principal e o processo relacionado para verificar impacto sobre eventual crédito.'
+        )
+
+    if dados.get('eh_requisitorio_ou_precatorio') and dados['processos_detectados']:
+        tribunal = dados['processos_detectados'][0].get('tribunal_provavel')
+        return (
+            f'Identificamos que o documento é um ofício requisitório/precatório'
+            + (f' do {tribunal}' if tribunal else '')
+            + '. Vamos confirmar o status junto ao órgão de precatórios do tribunal e retornar com a análise de valor e previsão.'
+        )
+
     if dados['processos_detectados']:
         p = dados['processos_detectados'][0]
         partes = [f'Recebemos as informações. Identificamos o processo nº {p["cnj_normalizado"]}']
