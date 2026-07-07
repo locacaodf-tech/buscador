@@ -42,6 +42,15 @@ TRT_PARA_UFS = {
     'TRT21': {'RN'}, 'TRT22': {'PI'}, 'TRT23': {'MT'}, 'TRT24': {'MS'},
 }
 
+TJ_PARA_UF = {
+    'TJAC': {'AC'}, 'TJAL': {'AL'}, 'TJAP': {'AP'}, 'TJAM': {'AM'}, 'TJBA': {'BA'},
+    'TJCE': {'CE'}, 'TJDFT': {'DF'}, 'TJES': {'ES'}, 'TJGO': {'GO'}, 'TJMA': {'MA'},
+    'TJMT': {'MT'}, 'TJMS': {'MS'}, 'TJMG': {'MG'}, 'TJPA': {'PA'}, 'TJPB': {'PB'},
+    'TJPR': {'PR'}, 'TJPE': {'PE'}, 'TJPI': {'PI'}, 'TJRJ': {'RJ'}, 'TJRN': {'RN'},
+    'TJRS': {'RS'}, 'TJRO': {'RO'}, 'TJRR': {'RR'}, 'TJSC': {'SC'}, 'TJSP': {'SP'},
+    'TJSE': {'SE'}, 'TJTO': {'TO'},
+}
+
 # Segmento (dígito J do CNJ) -> nome humano + prefixo de tribunal + mapa de UF
 SEGMENTO_INFO = {
     '1': {'nome': 'Supremo Tribunal Federal', 'prefixo': None},
@@ -51,7 +60,7 @@ SEGMENTO_INFO = {
     '5': {'nome': 'Justiça do Trabalho', 'prefixo': 'TRT', 'ufs': TRT_PARA_UFS},
     '6': {'nome': 'Justiça Eleitoral', 'prefixo': 'TRE'},
     '7': {'nome': 'Justiça Militar da União', 'prefixo': None},
-    '8': {'nome': 'Justiça Estadual', 'prefixo': 'TJ'},
+    '8': {'nome': 'Justiça Estadual', 'prefixo': 'TJ', 'ufs': TJ_PARA_UF},
     '9': {'nome': 'Justiça Militar Estadual', 'prefixo': None},
 }
 
@@ -181,22 +190,38 @@ def extrair_ente_devedor(texto: str) -> str | None:
 
 
 def analisar_cnj(cnj_normalizado: str) -> dict[str, Any]:
-    """Devolve segmento, tribunal provável e UFs que esse tribunal cobre —
-    a base pra detectar divergência com o que a pessoa disse no texto."""
+    """Devolve segmento, tribunal provável, UFs que esse tribunal cobre e a
+    fonte de consulta recomendada — a base pra detectar divergência com o
+    que a pessoa disse no texto e pra saber se já existe consulta
+    automática pra esse tribunal específico (checando o registry real do
+    DataJud, que cobre nacionalmente: 6 TRFs, 27 TJs, 24 TRTs, TREs — não
+    um palpite, é o mesmo registry que o DataJudBot usa de verdade)."""
+    from ..connectors.tribunal_registry import TRIBUNAL_ALIASES
+
     n = normalize_cnj(cnj_normalizado)
     if len(n) != 20:
-        return {'segmento_codigo': None, 'segmento_nome': None, 'tribunal_provavel': None, 'ufs_cobertas': None}
+        return {'segmento_codigo': None, 'segmento_nome': None, 'tribunal_provavel': None, 'ufs_cobertas': None, 'fonte_recomendada': None}
     segmento_codigo = n[13]
     info_segmento = SEGMENTO_INFO.get(segmento_codigo, {})
     tribunal = infer_tribunal_from_cnj(n)
     ufs_cobertas = None
     if tribunal and info_segmento.get('ufs'):
         ufs_cobertas = info_segmento['ufs'].get(tribunal)
+
+    if tribunal and tribunal in TRIBUNAL_ALIASES:
+        fonte_recomendada = f'Consulta automática disponível via DataJud ({tribunal}).'
+    elif tribunal:
+        fonte_recomendada = f'Tribunal provável identificado ({tribunal}). Consulta automática ainda não implementada para este tribunal. Fonte manual recomendada: portal oficial correspondente.'
+    else:
+        nome_segmento = info_segmento.get('nome') or 'segmento não identificado'
+        fonte_recomendada = f'Não foi possível inferir o tribunal específico a partir deste CNJ ({nome_segmento}). Consulte a fonte oficial correspondente a esse segmento.'
+
     return {
         'segmento_codigo': segmento_codigo,
         'segmento_nome': info_segmento.get('nome'),
         'tribunal_provavel': tribunal,
         'ufs_cobertas': sorted(ufs_cobertas) if ufs_cobertas else None,
+        'fonte_recomendada': fonte_recomendada,
     }
 
 
