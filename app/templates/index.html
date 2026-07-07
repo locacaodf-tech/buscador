@@ -1835,7 +1835,8 @@
         html += campoResultado('CNJ normalizado', p.cnj_normalizado);
         html += campoResultado('Segmento', p.segmento_nome);
         html += campoResultado('Tribunal provável', p.tribunal_provavel);
-        if (p.ufs_cobertas) html += campoResultado('UFs cobertas por esse tribunal', p.ufs_cobertas.join(', '));
+        if (p.ufs_cobertas) html += campoResultado('Abrangência (UFs cobertas)', p.ufs_cobertas.join(', '));
+        if (p.fonte_recomendada) html += campoResultado('Fonte recomendada', p.fonte_recomendada);
         html += '</div>';
       });
     } else {
