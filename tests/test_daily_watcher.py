@@ -76,7 +76,7 @@ def test_h_watcher_salva_publicationhit():
     resp = client.post('/api/watchers/run', json={'watcher': 'publication_watcher', 'publicacoes': [
         {'texto': 'Precatório expedido.', 'tribunal': 'TJSP'},
     ]})
-    run_id = resp.json()['publication_watcher']['watcher_run_id']
+    run_id = resp.json()['watchers']['publication_watcher']['watcher_run_id']
     detail = client.get(f'/api/watchers/runs/{run_id}').json()
     assert len(detail['hits']) >= 1
 
@@ -84,7 +84,7 @@ def test_h_watcher_salva_publicationhit():
 def test_i_watcher_salva_watcherrun():
     client = TestClient(app)
     resp = client.post('/api/watchers/run', json={'watcher': 'publication_watcher', 'publicacoes': []})
-    run_id = resp.json()['publication_watcher']['watcher_run_id']
+    run_id = resp.json()['watchers']['publication_watcher']['watcher_run_id']
     runs = client.get('/api/watchers/runs').json()
     assert any(r['id'] == run_id for r in runs)
 
@@ -106,8 +106,8 @@ def test_k_watchers_run_executa_manualmente_sem_publicacoes_usa_fixture_embutido
     resp = client.post('/api/watchers/run', json={})
     assert resp.status_code == 200
     body = resp.json()
-    assert 'publication_watcher' in body
-    assert body['publication_watcher']['total_publications'] > 0  # usou o fixture embutido, não ficou vazio
+    assert 'publication_watcher' in body['watchers']
+    assert body['watchers']['publication_watcher']['total_publications'] > 0  # usou o fixture embutido, não ficou vazio
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ def test_p_stj_watcher_reaproveita_sync(tmp_path, monkeypatch):
     resp = client.post('/api/watchers/run', json={'watcher': 'stj_official_file_watcher'})
     assert resp.status_code == 200
     # falha honesta de rede, não finge sucesso
-    assert resp.json()['stj_official_file_watcher']['status'] == 'failed'
+    assert resp.json()['watchers']['stj_official_file_watcher']['status'] == 'failed'
 
 
 # ---------------------------------------------------------------------------
@@ -191,9 +191,10 @@ def test_q_erro_em_um_watcher_nao_impede_os_demais(monkeypatch):
     resp = client.post('/api/watchers/run', json={'publicacoes': [{'texto': 'RPV expedida.', 'tribunal': 'TJSP'}], 'cnjs': []})
     assert resp.status_code == 200
     body = resp.json()
-    assert 'publication_watcher' in body
-    assert 'datajud_movement_watcher' in body
-    assert 'stj_official_file_watcher' in body
+    assert 'publication_watcher' in body['watchers']
+    assert 'datajud_movement_watcher' in body['watchers']
+    assert 'stj_official_file_watcher' in body['watchers']
+    assert body['overall_status'] in {'completed', 'partial', 'failed'}
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +207,7 @@ def test_r_watcherrun_mostra_totais():
         {'texto': 'Ofício requisitório.', 'tribunal': 'TRF1'},
         {'texto': 'Vista às partes.', 'tribunal': 'TJSP'},
     ]})
-    body = resp.json()['publication_watcher']
+    body = resp.json()['watchers']['publication_watcher']
     assert 'total_publications' in body
     assert 'total_matches' in body
     assert 'total_leads_created' in body
@@ -220,4 +221,8 @@ def test_r_watcherrun_mostra_totais():
 def test_status_e_honesto_sobre_agendamento():
     client = TestClient(app)
     status = client.get('/api/watchers/status').json()
-    assert 'cron' in status['agendamento'].lower() or 'manual' in status['agendamento'].lower()
+    assert 'cron_nativo_ativo' in status['agendamento']
+    assert status['agendamento']['cron_nativo_ativo'] is False
+    assert 'cron' in status['agendamento']['alternativa_gratuita'].lower()
+    assert 'bots_automaticos' in status
+    assert status['bots_automaticos']['ativado'] is False
