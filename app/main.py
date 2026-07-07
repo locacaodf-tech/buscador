@@ -15,16 +15,18 @@ from sqlalchemy.orm import Session
 from .auth import SESSION_COOKIE_NAME, create_session_token, verify_session_token
 from .config import get_settings, parse_allowed_origins
 from .db import get_db, init_db
-from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest, BotsRunRequest, BotsResumeRequest
+from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest, BotsRunRequest, BotsResumeRequest, IntakeWhatsappManualRequest
 from .services import stj_uploads
 from .services import certificate_center
 from .services import source_master
 from .services import captcha_relay
 from .services import diligencia_engine
+from .services import whatsapp_intake
 from .bots import runner as bots_runner
+from .bots import intake_bot
 from .bots.portal_bot import PortalBot
 from .services import manual_evidence
-from .models import CertificateRecord, ManualEvidence, DiligenciaLog, BotJob, BotStep
+from .models import CertificateRecord, ManualEvidence, DiligenciaLog, BotJob, BotStep, Lead, WhatsAppMessage, IntakeCase
 from .services.portal_automation import PORTAL_AUTOMATION_STUBS
 from .services.orchestrator import ProcessLookupOrchestrator, provider_capabilities
 from .connectors.tribunal_registry import ALL_TRIBUNALS, FEDERAL_TRIBUNALS, DEFAULT_PRECAT_TRIBUNALS
@@ -529,6 +531,149 @@ async def bots_job_resume(job_id: int, request: BotsResumeRequest, db: Session =
 def bots_status_endpoint():
     """Lista os bots que existem e o que cada um faz de verdade hoje."""
     return {'bots': bots_runner.bots_status()}
+
+
+def _obter_ou_criar_lead(db: Session, telefone: str | None, dados: dict) -> Lead:
+    lead = None
+    if telefone:
+        lead = db.query(Lead).filter(Lead.telefone == telefone).order_by(Lead.id.desc()).first()
+    if not lead:
+        lead = Lead(
+            telefone=telefone, nome=dados.get('nome'), cpf=dados.get('cpf'), cnpj=dados.get('cnpj'),
+            origem='whatsapp_manual',
+        )
+        db.add(lead)
+        db.commit()
+        db.refresh(lead)
+    elif dados.get('nome') and not lead.nome:
+        lead.nome = dados['nome']
+        db.commit()
+    return lead
+
+
+@app.post('/api/intake/whatsapp/manual', dependencies=[Depends(verify_internal_token)])
+async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Session = Depends(get_db)):
+    """v31 — IntakeBot manual: recebe texto colado do WhatsApp, extrai
+    CPF/CNJ/nome/UF/ente devedor, normaliza o CNJ, infere tribunal, aponta
+    divergência, aciona os bots existentes quando há processo detectado,
+    salva a mensagem original como evidência e gera dossiê."""
+    dados = whatsapp_intake.processar_mensagem(request.texto)
+    resposta_sugerida = whatsapp_intake.gerar_resposta_sugerida(dados)
+
+    lead = _obter_ou_criar_lead(db, request.telefone, dados)
+
+    msg = WhatsAppMessage(lead_id=lead.id, telefone=request.telefone, texto_original=request.texto, raw=dados)
+    db.add(msg)
+    db.commit()
+
+    from .bots.evidence_bot import registrar_evidencia_automatica
+    evidence_id = registrar_evidencia_automatica(
+        fonte='WhatsApp (mensagem colada manualmente)',
+        referencia=dados['processos_detectados'][0]['cnj_normalizado'] if dados['processos_detectados'] else (request.telefone or 'sem-referencia'),
+        texto=request.texto,
+    )
+
+    job_id = None
+    if dados['processos_detectados']:
+        bots_resultado = await intake_bot.acionar_bots_para_caso(dados, db=db)
+        if bots_resultado:
+            job = BotJob(
+                input_original=dados['processos_detectados'][0]['cnj_normalizado'],
+                tipo_identificado=bots_resultado['tipo_identificado'], objetivo='completo',
+                status=bots_resultado['status'], resumo_humano=bots_resultado['resumo_humano'],
+                proxima_acao=bots_resultado['proxima_acao_recomendada'], raw=bots_resultado,
+            )
+            db.add(job)
+            db.commit()
+            db.refresh(job)
+            for passo in bots_resultado['bots_executados']:
+                evidence_ids = passo.get('evidence_ids') or []
+                db.add(BotStep(
+                    job_id=job.id, bot_name=passo['bot_id'], status=passo['status'],
+                    finished_at=datetime.now(timezone.utc) if passo['status'] != 'waiting_user' else None,
+                    resultado=passo.get('resultado'), warning='; '.join(passo.get('warnings') or []) or None,
+                    next_action=passo.get('next_action'), evidence_id=evidence_ids[0] if evidence_ids else None,
+                ))
+            db.commit()
+            job_id = job.id
+
+    case = IntakeCase(
+        lead_id=lead.id, input_original=request.texto, dados_extraidos=dados,
+        processos_detectados=dados['processos_detectados'], divergencias=dados['divergencias'],
+        dados_faltantes=dados['dados_faltantes'], resposta_sugerida=resposta_sugerida, job_id=job_id,
+    )
+    db.add(case)
+    db.commit()
+    db.refresh(case)
+
+    return {
+        'lead_id': lead.id,
+        'case_id': case.id,
+        'dados_extraidos': {
+            **{k: v for k, v in dados.items() if k not in {'cpf', 'cnpj', 'texto_original'}},
+            'texto_original': whatsapp_intake.mascarar_documentos_no_texto(dados['texto_original']),
+        },
+        'processos_detectados': dados['processos_detectados'],
+        'divergencias': dados['divergencias'],
+        'dados_faltantes': dados['dados_faltantes'],
+        'proxima_acao': dados['divergencias'][0] if dados['divergencias'] else (dados['dados_faltantes'] and f"Peça também: {', '.join(dados['dados_faltantes'])}") or 'Bots acionados — confira o dossiê.',
+        'resposta_sugerida': resposta_sugerida,
+        'job_id': job_id,
+        'evidence_id': evidence_id,
+    }
+
+
+@app.post('/api/intake/whatsapp/screenshot', dependencies=[Depends(verify_internal_token)])
+async def intake_whatsapp_screenshot(
+    telefone: str = Form(''),
+    arquivo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """v31 — recebe print do WhatsApp. Sem OCR configurado (decisão
+    deliberada, não uma falha): salva o print como evidência e pede o
+    texto colado manualmente — nunca trava o fluxo."""
+    from .services import manual_evidence
+    content = await arquivo.read()
+    try:
+        arquivo_nome, arquivo_caminho = manual_evidence.save_evidence_file(arquivo.filename, content)
+    except manual_evidence.InvalidEvidenceFile as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    lead = _obter_ou_criar_lead(db, telefone, {})
+    msg = WhatsAppMessage(lead_id=lead.id, telefone=telefone, arquivo_evidencia=arquivo_caminho, raw={'ocr': 'nao_configurado'})
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    return {
+        'lead_id': lead.id,
+        'message_id': msg.id,
+        'ocr_disponivel': False,
+        'proxima_acao': 'OCR não configurado nesta versão. Cole abaixo o texto da conversa pra extrairmos os dados — o print já ficou salvo como evidência.',
+        'evidencia_arquivo': arquivo.filename,
+    }
+
+
+@app.get('/api/whatsapp/webhook')
+def whatsapp_webhook_verify(request: Request):
+    """Verificação do webhook da Meta (WhatsApp Business Cloud API) —
+    endpoint preparado, não ativado. Ativar exige token de verificação
+    próprio configurado (WHATSAPP_VERIFY_TOKEN), que ainda não existe."""
+    params = request.query_params
+    settings_local = get_settings()
+    verify_token = getattr(settings_local, 'whatsapp_verify_token', '') or ''
+    if verify_token and params.get('hub.verify_token') == verify_token:
+        return int(params.get('hub.challenge', 0))
+    raise HTTPException(status_code=403, detail='WhatsApp Business Cloud API ainda não configurado (WHATSAPP_VERIFY_TOKEN vazio).')
+
+
+@app.post('/api/whatsapp/webhook')
+async def whatsapp_webhook_receive(request: Request, db: Session = Depends(get_db)):
+    """Recebe mensagens do WhatsApp Business Cloud API — preparado, não
+    ativado nesta versão (decisão do usuário: não ativar WhatsApp Business
+    agora). Quando ativado, deveria extrair o texto da mensagem do payload
+    da Meta e processar igual ao endpoint manual."""
+    raise HTTPException(status_code=501, detail='Webhook do WhatsApp Business ainda não ativado — use /api/intake/whatsapp/manual por enquanto.')
 
 
 @app.get('/api/bots/jobs/{job_id}/dossie', response_class=HTMLResponse)
