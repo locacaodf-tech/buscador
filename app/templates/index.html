@@ -1861,7 +1861,8 @@
         html += '<div style="font-size:13px;">' + escapeHtml(l.tribunal || '') + ' · ' + escapeHtml(l.signal_type || '') + ' · status: ' + escapeHtml(l.status) + '</div>';
         html += '<div style="font-size:13px; color:var(--ink-soft, #666);">' + escapeHtml(l.next_action || '') + '</div>';
         html += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">';
-        if (l.bot_job_id) html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/bots/jobs/' + l.bot_job_id + '/dossie" target="_blank" rel="noopener">Abrir dossiê →</a>';
+        html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/leads/' + l.id + '/dossie" target="_blank" rel="noopener">Abrir dossiê do lead →</a>';
+        if (l.bot_job_id) html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/bots/jobs/' + l.bot_job_id + '/dossie" target="_blank" rel="noopener">Dossiê dos bots →</a>';
         else html += '<button class="cert-copy-btn" type="button" data-run-bots="' + l.id + '">Rodar bots</button>';
         html += '<button class="cert-copy-btn" type="button" data-mark-contacted="' + l.id + '">Marcar contatado</button>';
         html += '<button class="cert-copy-btn" type="button" data-dismiss="' + l.id + '">Descartar</button>';
@@ -1891,9 +1892,16 @@
     el('watcherStatusArea').innerHTML = simpleLoading('Rodando robôs...');
     try {
       const status = await apiFetch('/api/watchers/status', { method: 'GET', headers: buildHeaders(true) });
-      let html = '<div class="dados-faltantes-box"><b>Agendamento:</b> ' + escapeHtml(status.agendamento) + '</div>';
+      const data = await apiFetch('/api/watchers/run', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify({}) });
+      const OVERALL_LABEL = { completed: '✅ Concluído', partial: '🟡 Parcial — uma fonte falhou', failed: '❌ Falhou' };
+      let html = '<div class="dados-faltantes-box"><b>Status geral:</b> ' + (OVERALL_LABEL[data.overall_status] || data.overall_status) + '</div>';
+      html += '<div class="dados-faltantes-box"><b>Bots automáticos:</b> ' + escapeHtml(status.bots_automaticos.descricao) + '</div>';
+      html += '<div class="dados-faltantes-box"><b>Agendamento:</b> ' + escapeHtml(status.agendamento.alternativa_gratuita) + '</div>';
+      Object.entries(data.watchers || {}).forEach(([nome, r]) => {
+        html += '<div class="plano-item ' + (r.status === 'completed' ? 'disponivel' : r.status === 'failed' ? 'credencial' : 'nao_automatizado') + '">';
+        html += '<span>' + nome + '</span><span style="font-size:12px;">' + r.status + (r.duplicados_ignorados ? ' · ' + r.duplicados_ignorados + ' duplicado(s) ignorado(s)' : '') + '</span></div>';
+      });
       el('watcherStatusArea').innerHTML = html;
-      await apiFetch('/api/watchers/run', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify({}) });
       carregarLeads();
     } catch (e) {
       el('watcherStatusArea').innerHTML = simpleMessage('Não consegui rodar os robôs: ' + e.message, 'error');
