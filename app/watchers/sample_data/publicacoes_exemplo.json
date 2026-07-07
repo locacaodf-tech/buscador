@@ -1,0 +1,50 @@
+[
+  {
+    "texto": "Fica expedido o ofício requisitório em favor do credor Antônio Carlos Ferreira, natureza alimentar, contra o INSS, no valor de R$ 87.450,32.",
+    "tribunal": "TRF1",
+    "numero_processo": "0032681-47.2017.4.01.3400",
+    "data": "2026-07-06",
+    "partes": "Antônio Carlos Ferreira x INSS",
+    "url": "https://exemplo-fixture.local/publicacao/1"
+  },
+  {
+    "texto": "Homologo os cálculos apresentados pelo contador judicial. Aguarda-se o trânsito em julgado para expedição do requisitório.",
+    "tribunal": "TJBA",
+    "numero_processo": "8000694-09.2025.8.05.0043",
+    "data": "2026-07-06",
+    "partes": "Maria das Graças Santos x Estado da Bahia",
+    "url": "https://exemplo-fixture.local/publicacao/2"
+  },
+  {
+    "texto": "Certidão de trânsito em julgado expedida. Processo em fase de cumprimento de sentença. Natureza alimentar.",
+    "tribunal": "TRT7",
+    "numero_processo": "0000765-97.2023.5.07.0016",
+    "data": "2026-07-05",
+    "partes": "José Ribamar x Município de Fortaleza",
+    "url": "https://exemplo-fixture.local/publicacao/3"
+  },
+  {
+    "texto": "Reintegração deferida. Diferenças salariais a apurar em liquidação de sentença.",
+    "tribunal": "TRT2",
+    "numero_processo": "1000123-45.2022.5.02.0001",
+    "data": "2026-07-05",
+    "partes": "Servidor Público x Município de São Paulo",
+    "url": "https://exemplo-fixture.local/publicacao/4"
+  },
+  {
+    "texto": "Vista às partes para manifestação sobre a petição juntada aos autos.",
+    "tribunal": "TJSP",
+    "numero_processo": null,
+    "data": "2026-07-06",
+    "partes": null,
+    "url": "https://exemplo-fixture.local/publicacao/5"
+  },
+  {
+    "texto": "Processo em segredo de justiça. Intimação da parte requerida.",
+    "tribunal": "TJRJ",
+    "numero_processo": "0500001-11.2024.8.19.0001",
+    "data": "2026-07-06",
+    "partes": null,
+    "url": "https://exemplo-fixture.local/publicacao/6"
+  }
+]
