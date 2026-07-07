@@ -573,8 +573,26 @@ async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Sessi
         texto=request.texto,
     )
 
+    # v32.2: acha se essa MESMA mensagem já virou lead antes (dedupe_key) —
+    # se sim, não roda os bots de novo à toa (mesma filosofia do watcher:
+    # duplicata exata não deve gastar chamada de DataJud/CPU de novo).
+    opportunity_lead_existente = None
+    if dados['processos_detectados'] and (dados.get('ente_devedor') or dados.get('tipo_acao') or dados.get('eh_requisitorio_ou_precatorio')):
+        from .watchers.precatorio_signal_engine import classificar_publicacao
+        from .watchers.scheduler import _calcular_text_hash, _calcular_dedupe_key
+        proc_principal_check = dados['processos_detectados'][0]
+        classificacao_check = classificar_publicacao(request.texto + ' ' + (dados.get('tipo_acao') or ''))
+        signal_type_check = classificacao_check['signal_type'] if classificacao_check['signal_type'] not in {None, 'descartar', 'lead_fraco'} else (
+            'credito_judicial_potencial' if dados.get('ente_devedor') else classificacao_check['signal_type']
+        )
+        dedupe_key_check = _calcular_dedupe_key(
+            source='whatsapp_intake', normalized_cnj=proc_principal_check['cnj_normalizado'],
+            signal_type=signal_type_check, publication_date=None, text_hash=_calcular_text_hash(request.texto),
+        )
+        opportunity_lead_existente = db.query(OpportunityLead).filter(OpportunityLead.dedupe_key == dedupe_key_check).first()
+
     job_id = None
-    if dados['processos_detectados']:
+    if dados['processos_detectados'] and not opportunity_lead_existente:
         bots_resultado = await intake_bot.acionar_bots_para_caso(dados, db=db)
         if bots_resultado:
             bots_resultado['contexto_documento'] = {
@@ -677,10 +695,72 @@ async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Sessi
                 + f', mas não houve retorno. Como o documento é um ofício requisitório/precatório, a fonte principal '
                 + f'de confirmação deve ser o {tribunal}/DEPRE (órgão de precatórios do tribunal).'
             )
+        elif datajud_sem_resultado and dados.get('ente_devedor') and dados['processos_detectados']:
+            # v32.2: achado real — mensagem com CNJ + ente público + tipo de
+            # ação (ex.: "Polo Passivo: Estado de Goiás", "Tipo de ação:
+            # Horas Extras") não pode virar "não encontramos". DataJud é
+            # enriquecimento, não condição de existir resultado.
+            tribunal = dados['processos_detectados'][0].get('tribunal_provavel')
+            proxima_acao = (
+                f"CNJ válido e tribunal inferido: {tribunal}. A consulta DataJud não retornou resultado, mas a "
+                f"mensagem informa ação contra {dados['ente_devedor']}"
+                + (f' ({dados["tipo_acao"]})' if dados.get('tipo_acao') else '')
+                + f". O caso foi salvo como lead para verificação manual no {tribunal}."
+            )
+    elif not proxima_acao and opportunity_lead_existente:
+        # Duplicata exata — não rodou bots de novo, mas o lead já existia
+        # com uma próxima ação registrada da vez anterior.
+        proxima_acao = opportunity_lead_existente.next_action
     if not proxima_acao and dados['dados_faltantes']:
         proxima_acao = f"Peça também: {', '.join(dados['dados_faltantes'])}"
     if not proxima_acao:
         proxima_acao = 'Bots acionados — confira o dossiê.'
+
+    # v32.2: cria (ou atualiza, se duplicata) o OpportunityLead — antes
+    # disso, só o watcher criava lead, e uma mensagem de cliente com dado
+    # suficiente (CNJ + ente público/tipo de ação/requisitório-precatório)
+    # sumia sem gerar nada em /api/leads.
+    opportunity_lead_id = None
+    if opportunity_lead_existente:
+        opportunity_lead_existente.last_seen_at = datetime.now(timezone.utc)
+        opportunity_lead_existente.seen_count = (opportunity_lead_existente.seen_count or 1) + 1
+        db.commit()
+        opportunity_lead_id = opportunity_lead_existente.id
+    elif dados['processos_detectados'] and (dados.get('ente_devedor') or dados.get('tipo_acao') or dados.get('eh_requisitorio_ou_precatorio')):
+        from .watchers.precatorio_signal_engine import classificar_publicacao
+        from .watchers.lead_ranker import calcular_score
+        from .watchers.scheduler import _calcular_text_hash, _calcular_dedupe_key
+
+        proc_principal = dados['processos_detectados'][0]
+        texto_para_classificar = request.texto + ' ' + (dados.get('tipo_acao') or '')
+        classificacao = classificar_publicacao(texto_para_classificar)
+        signal_type = classificacao['signal_type'] if classificacao['signal_type'] not in {None, 'descartar', 'lead_fraco'} else (
+            'credito_judicial_potencial' if dados.get('ente_devedor') else classificacao['signal_type']
+        )
+        dedupe_key = _calcular_dedupe_key(
+            source='whatsapp_intake', normalized_cnj=proc_principal['cnj_normalizado'],
+            signal_type=signal_type, publication_date=None, text_hash=_calcular_text_hash(request.texto),
+        )
+        score_info = calcular_score(
+            signal_type=signal_type, cnj=proc_principal['cnj_normalizado'], tribunal=proc_principal.get('tribunal_provavel'),
+            ente_devedor=dados.get('ente_devedor'), natureza_alimentar='alimentar' in request.texto.lower(),
+            valor_explicito=bool(dados.get('valor_causa')), segredo_de_justica=bool(dados.get('segredo_de_justica')),
+            termos_negativos=[],
+        )
+        agora = datetime.now(timezone.utc)
+        opp_lead = OpportunityLead(
+            dedupe_key=dedupe_key, first_seen_at=agora, last_seen_at=agora, seen_count=1,
+            source='whatsapp_intake', process_number=proc_principal['cnj_original'], normalized_cnj=proc_principal['cnj_normalizado'],
+            tribunal=proc_principal.get('tribunal_provavel'), debtor=dados.get('ente_devedor'),
+            signal_type=signal_type, estimated_opportunity_type=dados.get('tipo_acao'),
+            confidence_score=score_info['score'], priority=score_info['prioridade'],
+            bot_job_id=job_id, dossie_url=(f'/api/bots/jobs/{job_id}/dossie' if job_id else None),
+            next_action=proxima_acao, publication_text=request.texto, matched_terms=classificacao['termos_batidos'],
+        )
+        db.add(opp_lead)
+        db.commit()
+        db.refresh(opp_lead)
+        opportunity_lead_id = opp_lead.id
 
     case = IntakeCase(
         lead_id=lead.id, input_original=request.texto, dados_extraidos=dados,
@@ -709,6 +789,7 @@ async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Sessi
         'resposta_sugerida': resposta_sugerida,
         'job_id': job_id,
         'job_id_referencia': job_id_referencia,
+        'opportunity_lead_id': opportunity_lead_id,
         'evidence_id': evidence_id,
     }
 
