@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 
 from ..utils.cpf import only_digits
-from ..utils.cnj import normalize_cnj
+from ..utils.cnj import normalize_cnj, split_cnj_suffix
 
 
 SUPPORTED_SEARCH_TYPES = {
@@ -56,6 +56,7 @@ class ResolvedIdentifier:
     search_key: str
     confidence: str = 'explicit'
     notes: tuple[str, ...] = ()
+    sufixo: str | None = None
 
 
 def normalize_search_type(value: str | None) -> str:
@@ -81,12 +82,19 @@ def infer_identifier(value: str | None, explicit_type: str = 'auto') -> Resolved
     if requested != 'auto':
         return ResolvedIdentifier(requested, normalize_identifier_value(requested, key), 'explicit')
 
-    digits = only_digits(key)
+    # Achado real de auditoria: essa é a função central usada por
+    # /api/diligencia, /api/bots/run, /api/search e a tela "Analisar
+    # processo por CNJ" — o fix de sufixo (/01, incidente/desdobramento)
+    # tinha sido aplicado só no IntakeBot (whatsapp_intake.py), nunca
+    # aqui. normalize_cnj já separa e descarta o sufixo antes de contar
+    # dígitos; só precisamos capturar o sufixo separadamente pra exibir.
+    _cnj_base, sufixo = split_cnj_suffix(key)
+    digits = normalize_cnj(key)
     lower = key.lower()
     notes: list[str] = []
 
     if len(digits) == 20:
-        return ResolvedIdentifier('cnj', digits, 'high', ('20 dígitos: formato típico de número CNJ.',))
+        return ResolvedIdentifier('cnj', digits, 'high', ('20 dígitos: formato típico de número CNJ.',), sufixo=sufixo)
 
     if len(digits) == 11:
         return ResolvedIdentifier('cpf', digits, 'medium', ('11 dígitos: tratado como CPF; valide se também não é outro identificador interno.',))
