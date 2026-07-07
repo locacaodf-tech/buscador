@@ -56,7 +56,10 @@ def test_infere_tribunal_federal_continua_funcionando():
 
 
 def test_segmento_nao_mapeado_devolve_none():
-    assert infer_tribunal_from_cnj('0000000-00.2020.5.10.0001') is None  # trabalhista, nao coberto
+    # Eleitoral (segmento 6) genuinamente não é coberto ainda — trabalhista
+    # (segmento 5) passou a ser coberto na v31 (TRT1-24), então deixou de
+    # servir como exemplo de "não mapeado".
+    assert infer_tribunal_from_cnj('0000000-00.2020.6.10.0001') is None
 
 
 # ---------------------------------------------------------------------------
