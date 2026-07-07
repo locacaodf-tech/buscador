@@ -641,7 +641,26 @@ async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Sessi
     proxima_acao = dados['divergencias'][0] if dados['divergencias'] else None
     if not proxima_acao and job_id:
         job_criado = db.query(BotJob).filter(BotJob.id == job_id).first()
-        datajud_sem_resultado = job_criado and job_criado.status in {'partial', 'failed'}
+        # Achado real de auditoria: checar só job.status (partial/failed)
+        # não capturava o caso "DataJud foi consultado com sucesso, mas
+        # veio vazio" — esse caso deixa o step (e o job) como 'concluido',
+        # não 'partial'. Documento com contexto forte (ofício requisitório,
+        # ação rescisória, processo referência) precisa ganhar prioridade
+        # sempre que o DataJud não confirmou nada, seja por falha OU por
+        # retorno vazio — nunca só "peça CPF/nome".
+        datajud_sem_resultado = False
+        if job_criado:
+            steps_datajud = [s for s in (bots_resultado.get('bots_executados') or []) if s['bot_id'] == 'datajud_bot']
+            if steps_datajud:
+                status_consulta = ((steps_datajud[0].get('resultado') or {}).get('consulta') or {}).get('status_consulta')
+                sem_resultados_confirmados = not (steps_datajud[0].get('resultado') or {}).get('resultados_confirmados')
+                datajud_sem_resultado = (
+                    status_consulta in {'consultado_sem_resultado', 'falhou'}
+                    or steps_datajud[0]['status'] == 'falhou'
+                    or (steps_datajud[0]['status'] == 'concluido' and sem_resultados_confirmados)
+                )
+            else:
+                datajud_sem_resultado = job_criado.status in {'partial', 'failed'}
         if datajud_sem_resultado and dados.get('classe_documento') == 'Ação Rescisória' and dados.get('processo_referencia'):
             tribunal = dados['processos_detectados'][0].get('tribunal_provavel') if dados['processos_detectados'] else None
             proxima_acao = (
