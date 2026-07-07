@@ -552,9 +552,30 @@
         <span class="hub-icon">📋</span>
         <span class="hub-label">Consultar/planejar certidões</span>
       </button>
+      <button class="hub-btn" id="btnHubWhatsapp" type="button" style="grid-column: 1 / -1;">
+        <span class="hub-icon">💬</span>
+        <span class="hub-label">Nova diligência do WhatsApp</span>
+      </button>
     </div>
     <div id="ultimasDiligenciasArea" style="margin-top:20px;"></div>
     <a href="#" class="link-diagnostico" id="linkAbrirDiagnostico" style="display:block; text-align:center; margin-top:18px;">⚙️ Ver se minha ferramenta está pronta</a>
+  </section>
+
+  <!-- ===== Painel: Nova diligência do WhatsApp (v31) ===== -->
+  <section class="simple-card" id="panelWhatsapp" style="display:none;">
+    <a href="#" class="voltar-hub" data-voltar>← Voltar</a>
+    <h2 class="simple-title" style="margin-top:14px;">Nova diligência do WhatsApp</h2>
+    <p class="simple-subtitle">Cole aqui a conversa ou mensagem do WhatsApp — sem OCR ainda, então print vira só evidência, precisa colar o texto também.</p>
+
+    <label for="whatsappTexto">Cole aqui a conversa ou mensagem do WhatsApp</label>
+    <textarea id="whatsappTexto" rows="6" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-family:inherit; font-size:15px;" placeholder="Ex.: O número 00007659720235070016. Fortaleza/CE."></textarea>
+    <button class="simple-button" id="btnWhatsappExtrair" type="button" style="margin-top:12px;">Extrair e iniciar bots</button>
+
+    <label for="whatsappPrint" style="margin-top:16px;">Ou envie print do WhatsApp <span class="hint">— vira evidência, sem OCR ainda</span></label>
+    <input type="file" id="whatsappPrint" accept="image/*" />
+    <button class="secondary" id="btnWhatsappEnviarPrint" type="button" style="width:100%; margin-top:8px;">Enviar print do WhatsApp</button>
+
+    <div id="whatsappResultado"></div>
   </section>
 
   <!-- ===== Painel: Analisar processo por CNJ ===== -->
@@ -1764,7 +1785,7 @@
 
   // ================= Hub de 4 botões (MVP operacional) =================
 
-  const PAINEIS = ['simplePanel', 'panelCnj', 'panelPrecatorioRpv', 'simpleCertPanel', 'panelDiagnostico'];
+  const PAINEIS = ['simplePanel', 'panelCnj', 'panelPrecatorioRpv', 'simpleCertPanel', 'panelDiagnostico', 'panelWhatsapp'];
   function mostrarPainel(idParaMostrar) {
     PAINEIS.forEach((id) => { el(id).style.display = (id === idParaMostrar) ? 'block' : 'none'; });
     el('simpleResultsArea').innerHTML = '';
@@ -1774,6 +1795,7 @@
     if (idParaMostrar !== 'panelCnj' && el('cnjResultArea')) el('cnjResultArea').innerHTML = '';
     if (idParaMostrar !== 'simplePanel' && el('buscaLivreResultado')) el('buscaLivreResultado').innerHTML = '';
     if (idParaMostrar !== 'simplePanel' && el('botsResultado')) el('botsResultado').innerHTML = '';
+    if (idParaMostrar !== 'panelWhatsapp' && el('whatsappResultado')) el('whatsappResultado').innerHTML = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   document.querySelectorAll('[data-voltar]').forEach((link) => {
@@ -1784,6 +1806,89 @@
   el('btnHubStj').addEventListener('click', () => { setMode(false); switchTab('stj'); });
   el('btnHubPrecatorio').addEventListener('click', () => mostrarPainel('panelPrecatorioRpv'));
   el('btnHubCertidoes').addEventListener('click', () => { mostrarPainel('simpleCertPanel'); el('certGuiaResultado').innerHTML = ''; el('certTribunalList').innerHTML = ''; el('certFieldsArea').innerHTML = ''; });
+  el('btnHubWhatsapp').addEventListener('click', () => { mostrarPainel('panelWhatsapp'); el('whatsappResultado').innerHTML = ''; });
+
+  // ---------- Nova diligência do WhatsApp (v31, modo manual) ----------
+
+  async function handleWhatsappExtrair() {
+    const texto = el('whatsappTexto').value.trim();
+    if (!texto) {
+      el('whatsappResultado').innerHTML = simpleMessage('Cole o texto da conversa antes de extrair.', 'info');
+      return;
+    }
+    el('whatsappResultado').innerHTML = simpleLoading('Extraindo dados e acionando bots...');
+    try {
+      const data = await apiFetch('/api/intake/whatsapp/manual', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify({ texto }) });
+      renderWhatsappResultado(data);
+    } catch (e) {
+      el('whatsappResultado').innerHTML = simpleMessage('Não consegui processar agora: ' + e.message, 'error');
+    }
+  }
+
+  function renderWhatsappResultado(data) {
+    let html = '';
+    const processos = data.processos_detectados || [];
+    if (processos.length) {
+      processos.forEach((p) => {
+        html += '<div class="stj-result-card">';
+        html += '<div class="stj-result-headline">📄 Processo identificado</div>';
+        html += campoResultado('CNJ normalizado', p.cnj_normalizado);
+        html += campoResultado('Segmento', p.segmento_nome);
+        html += campoResultado('Tribunal provável', p.tribunal_provavel);
+        if (p.ufs_cobertas) html += campoResultado('UFs cobertas por esse tribunal', p.ufs_cobertas.join(', '));
+        html += '</div>';
+      });
+    } else {
+      html += simpleMessage('Não achei um número de processo/CNJ reconhecível nessa mensagem.', 'info');
+    }
+
+    if (data.divergencias && data.divergencias.length) {
+      html += '<div class="dados-faltantes-box" style="background:var(--danger-bg); border-color:#f3c6c1;"><b>⚠️ Divergência encontrada:</b><br>' + data.divergencias.map((d) => escapeHtml(d)).join('<br>') + '</div>';
+    }
+    if (data.dados_faltantes && data.dados_faltantes.length) {
+      html += '<div class="dados-faltantes-box"><b>Dados que ainda faltam:</b><br>' + data.dados_faltantes.map((d) => '• ' + escapeHtml(d)).join('<br>') + '</div>';
+    }
+
+    if (data.resposta_sugerida) {
+      html += '<div class="plano-grupo"><div class="grupo-titulo">Resposta sugerida pro cliente</div>';
+      html += '<div class="stj-result-card" style="font-style:italic;">' + escapeHtml(data.resposta_sugerida) + '</div>';
+      html += '<button class="cert-copy-btn" type="button" id="btnCopiarRespostaWhatsapp" style="margin-top:8px;">Copiar resposta</button>';
+      html += '</div>';
+    }
+
+    if (data.job_id) {
+      html += '<div class="dados-faltantes-box" style="background:var(--success-bg); border-color:#bfe3cd; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">';
+      html += '<span>✅ Bots acionados — job nº ' + data.job_id + '</span>';
+      html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/bots/jobs/' + data.job_id + '/dossie" target="_blank" rel="noopener">Abrir dossiê →</a>';
+      html += '</div>';
+    }
+    if (data.evidence_id) {
+      html += proximaAcaoBox(data.proxima_acao || 'Mensagem original salva como evidência #' + data.evidence_id + '.');
+    }
+
+    el('whatsappResultado').innerHTML = html;
+    const btnCopiar = el('btnCopiarRespostaWhatsapp');
+    if (btnCopiar) btnCopiar.addEventListener('click', () => copiarTexto(data.resposta_sugerida, btnCopiar));
+  }
+  el('btnWhatsappExtrair').addEventListener('click', handleWhatsappExtrair);
+
+  async function handleWhatsappEnviarPrint() {
+    const arquivo = el('whatsappPrint').files[0];
+    if (!arquivo) {
+      el('whatsappResultado').innerHTML = simpleMessage('Escolha um print antes de enviar.', 'info');
+      return;
+    }
+    el('whatsappResultado').innerHTML = simpleLoading('Enviando print...');
+    try {
+      const formData = new FormData();
+      formData.append('arquivo', arquivo);
+      const data = await apiFetch('/api/intake/whatsapp/screenshot', { method: 'POST', headers: buildHeaders(false), body: formData });
+      el('whatsappResultado').innerHTML = simpleMessage(data.proxima_acao, 'info');
+    } catch (e) {
+      el('whatsappResultado').innerHTML = simpleMessage('Não consegui enviar: ' + e.message, 'error');
+    }
+  }
+  el('btnWhatsappEnviarPrint').addEventListener('click', handleWhatsappEnviarPrint);
 
   async function carregarUltimasDiligencias() {
     const area = el('ultimasDiligenciasArea');
