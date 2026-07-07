@@ -683,6 +683,7 @@
     <button class="tab-btn" data-tab="stj" type="button">STJ</button>
     <button class="tab-btn" data-tab="certidoes" type="button">Certidões</button>
     <button class="tab-btn" data-tab="fontes" type="button">Fontes</button>
+    <button class="tab-btn" data-tab="datajud" type="button">DataJud</button>
   </nav>
 
   <!-- ===== Aba: Precatório/RPV (busca completa existente) ===== -->
@@ -869,6 +870,20 @@
       </div>
     </section>
     <section id="fontesResultsArea"></section>
+  </div>
+
+  <!-- ===== Aba: DataJud (diagnóstico multi-tribunal, v31d) ===== -->
+  <div class="tab-panel" id="tab-datajud">
+    <section class="card">
+      <h2>Diagnóstico DataJud por tribunal</h2>
+      <p class="diligencia-hint">Cola um CNJ e vê exatamente qual tribunal foi inferido, qual alias/endpoint do DataJud foi consultado, o status HTTP e o resultado — nunca só "não encontramos".</p>
+      <label for="datajudCnjInput">CNJ (com ou sem pontuação)</label>
+      <input type="text" id="datajudCnjInput" placeholder="Ex.: 5000563-34.2022.4.03.6331" autocomplete="off" />
+      <div class="btn-row" style="margin-top:0;">
+        <button class="primary" id="btnDatajudDiagnosticar" type="button">Diagnosticar</button>
+      </div>
+    </section>
+    <section id="datajudResultadoArea"></section>
   </div>
 
 </main>
@@ -1807,6 +1822,37 @@
   el('btnHubPrecatorio').addEventListener('click', () => mostrarPainel('panelPrecatorioRpv'));
   el('btnHubCertidoes').addEventListener('click', () => { mostrarPainel('simpleCertPanel'); el('certGuiaResultado').innerHTML = ''; el('certTribunalList').innerHTML = ''; el('certFieldsArea').innerHTML = ''; });
   el('btnHubWhatsapp').addEventListener('click', () => { mostrarPainel('panelWhatsapp'); el('whatsappResultado').innerHTML = ''; });
+
+  // ---------- Diagnóstico DataJud por tribunal (v31d) ----------
+
+  async function handleDatajudDiagnosticar() {
+    const cnj = el('datajudCnjInput').value.trim();
+    if (!cnj) {
+      el('datajudResultadoArea').innerHTML = simpleMessage('Cole um CNJ antes de diagnosticar.', 'info');
+      return;
+    }
+    el('datajudResultadoArea').innerHTML = simpleLoading('Consultando o DataJud de verdade...');
+    try {
+      const data = await apiFetch('/api/datajud/diagnostico/' + encodeURIComponent(cnj), { method: 'GET', headers: buildHeaders(true) });
+      let html = '<div class="stj-result-card">';
+      html += campoResultado('CNJ digitado', data.cnj_original);
+      html += campoResultado('CNJ normalizado', data.cnj_normalizado);
+      html += campoResultado('Segmento', data.segmento);
+      html += campoResultado('Tribunal inferido', data.tribunal_inferido);
+      html += campoResultado('Alias DataJud', data.alias_datajud);
+      html += campoResultado('Endpoint consultado', data.endpoint);
+      html += campoResultado('Status HTTP', data.status_http);
+      html += campoResultado('Resultado', data.resultado);
+      if (data.erro) html += campoResultado('Erro', data.erro);
+      html += campoResultado('Consultado em', data.consultado_em);
+      html += '</div>';
+      html += proximaAcaoBox(data.proxima_acao || '');
+      el('datajudResultadoArea').innerHTML = html;
+    } catch (e) {
+      el('datajudResultadoArea').innerHTML = simpleMessage('Não consegui diagnosticar agora: ' + e.message, 'error');
+    }
+  }
+  el('btnDatajudDiagnosticar').addEventListener('click', handleDatajudDiagnosticar);
 
   // ---------- Nova diligência do WhatsApp (v31, modo manual) ----------
 
