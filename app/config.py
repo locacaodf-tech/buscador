@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # API) — vazio por padrão, o que mantém o webhook desativado (decisão
     # deliberada: não ativar WhatsApp Business agora).
     whatsapp_verify_token: str = ''
+    # v32.1: se true, leads de alta prioridade acionam bots automaticamente
+    # quando o watcher roda. Default false — não sobrecarregar sem pedir.
+    watchers_auto_run_bots: bool = False
 
 
 def parse_allowed_origins(raw: str) -> list[str]:
