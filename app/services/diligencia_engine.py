@@ -93,11 +93,21 @@ async def _consultar_cnj(valor: str, tribunal_hint: str | None) -> dict[str, Any
         }
 
     if not encontrados:
+        from ..services.datajud_diagnostico import _fonte_manual_para, _endpoint_e_alias
+        alias, endpoint = _endpoint_e_alias(tribunal_provavel) if tribunal_provavel else (None, None)
+        consulta_info['alias_datajud'] = alias
+        consulta_info['endpoint'] = endpoint
         consulta_info['status_consulta'] = 'consultado_sem_resultado'
         etapas.append(_etapa('DataJud', 'concluido', 'Consulta feita no DataJud, mas não houve resultado para este CNJ.'))
-        proxima_acao = 'Consulta feita no DataJud, mas não houve resultado para este CNJ. Confira o número, ou tente o portal do tribunal diretamente.'
         if tribunal_provavel:
-            proxima_acao += f' Tribunal provável: {tribunal_provavel} — consultar o portal do {tribunal_provavel} diretamente.'
+            fonte_manual = _fonte_manual_para(tribunal_provavel)
+            proxima_acao = (
+                f'Consultamos o DataJud no tribunal {tribunal_provavel} e não houve retorno para esse CNJ. '
+                f'O processo pode não estar indexado, pode estar restrito ou o número pode estar incorreto. '
+                f'Próxima ação: consultar o portal oficial do tribunal ({fonte_manual}).'
+            )
+        else:
+            proxima_acao = 'Consulta feita no DataJud, mas não houve resultado para este CNJ, e não foi possível inferir o tribunal específico. Confira o número.'
         return {
             'etapas': etapas, 'resultados_confirmados': resultados_confirmados,
             'indicios': indicios, 'pendencias': pendencias,
