@@ -1,8 +1,25 @@
 import re
 
 
+def split_cnj_suffix(value: str | None) -> tuple[str, str | None]:
+    """Separa um CNJ do sufixo/incidente que às vezes vem colado no final
+    (ex.: '0016114-59.2017.8.26.0053/01' — o '/01' indica um incidente,
+    desdobramento ou volume vinculado ao processo principal, não faz
+    parte do número CNJ em si). Devolve (cnj_sem_sufixo, sufixo_ou_None).
+
+    Achado real: sem essa separação, normalize_cnj colava os dígitos do
+    sufixo direto no CNJ (virando 22 dígitos em vez de 20), quebrando a
+    inferência de tribunal por completo pra qualquer CNJ com sufixo."""
+    texto = (value or '').strip()
+    match = re.search(r'^(.*\d)\s*/\s*(\d{1,3})\s*$', texto)
+    if match:
+        return match.group(1), match.group(2)
+    return texto, None
+
+
 def normalize_cnj(value: str | None) -> str:
-    return re.sub(r'\D+', '', value or '')
+    base, _ = split_cnj_suffix(value)
+    return re.sub(r'\D+', '', base)
 
 
 def format_cnj(value: str | None) -> str:
