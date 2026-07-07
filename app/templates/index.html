@@ -556,6 +556,10 @@
         <span class="hub-icon">💬</span>
         <span class="hub-label">Nova diligência do WhatsApp</span>
       </button>
+      <button class="hub-btn" id="btnHubLeads" type="button" style="grid-column: 1 / -1;">
+        <span class="hub-icon">🎯</span>
+        <span class="hub-label">Leads encontrados (robôs diários)</span>
+      </button>
     </div>
     <div id="ultimasDiligenciasArea" style="margin-top:20px;"></div>
     <a href="#" class="link-diagnostico" id="linkAbrirDiagnostico" style="display:block; text-align:center; margin-top:18px;">⚙️ Ver se minha ferramenta está pronta</a>
@@ -576,6 +580,20 @@
     <button class="secondary" id="btnWhatsappEnviarPrint" type="button" style="width:100%; margin-top:8px;">Enviar print do WhatsApp</button>
 
     <div id="whatsappResultado"></div>
+  </section>
+
+  <!-- ===== Painel: Leads encontrados / Robôs diários (v32) ===== -->
+  <section class="simple-card" id="panelLeads" style="display:none;">
+    <a href="#" class="voltar-hub" data-voltar>← Voltar</a>
+    <h2 class="simple-title" style="margin-top:14px;">Robôs diários</h2>
+    <p class="simple-subtitle">Sem cron ativo ainda neste ambiente — acione manualmente aqui, ou configure um cron externo gratuito (ver relatório da entrega).</p>
+    <div class="btn-row" style="margin-top:0;">
+      <button class="primary" id="btnRodarWatchers" type="button">Rodar agora (fixture de exemplo)</button>
+    </div>
+    <div id="watcherStatusArea" style="margin-top:14px;"></div>
+
+    <h2 class="simple-title" style="margin-top:26px;">Leads encontrados</h2>
+    <div id="leadsListaArea"></div>
   </section>
 
   <!-- ===== Painel: Analisar processo por CNJ ===== -->
@@ -1800,7 +1818,7 @@
 
   // ================= Hub de 4 botões (MVP operacional) =================
 
-  const PAINEIS = ['simplePanel', 'panelCnj', 'panelPrecatorioRpv', 'simpleCertPanel', 'panelDiagnostico', 'panelWhatsapp'];
+  const PAINEIS = ['simplePanel', 'panelCnj', 'panelPrecatorioRpv', 'simpleCertPanel', 'panelDiagnostico', 'panelWhatsapp', 'panelLeads'];
   function mostrarPainel(idParaMostrar) {
     PAINEIS.forEach((id) => { el(id).style.display = (id === idParaMostrar) ? 'block' : 'none'; });
     el('simpleResultsArea').innerHTML = '';
@@ -1822,6 +1840,65 @@
   el('btnHubPrecatorio').addEventListener('click', () => mostrarPainel('panelPrecatorioRpv'));
   el('btnHubCertidoes').addEventListener('click', () => { mostrarPainel('simpleCertPanel'); el('certGuiaResultado').innerHTML = ''; el('certTribunalList').innerHTML = ''; el('certFieldsArea').innerHTML = ''; });
   el('btnHubWhatsapp').addEventListener('click', () => { mostrarPainel('panelWhatsapp'); el('whatsappResultado').innerHTML = ''; });
+  el('btnHubLeads').addEventListener('click', () => { mostrarPainel('panelLeads'); carregarLeads(); });
+
+  // ---------- Leads encontrados / Robôs diários (v32) ----------
+
+  const PRIORIDADE_LABEL = { alta: '🔴 Alta', media: '🟡 Média', baixa: '⚪ Baixa' };
+
+  async function carregarLeads() {
+    el('leadsListaArea').innerHTML = simpleLoading('Carregando leads...');
+    try {
+      const leads = await apiFetch('/api/leads', { method: 'GET', headers: buildHeaders(true) });
+      if (!leads.length) {
+        el('leadsListaArea').innerHTML = simpleMessage('Nenhum lead ainda — rode os robôs acima pra começar.', 'info');
+        return;
+      }
+      let html = '';
+      leads.forEach((l) => {
+        html += '<div class="plano-item ' + (l.priority === 'alta' ? 'disponivel' : l.priority === 'media' ? 'nao_automatizado' : 'manual') + '" style="flex-direction:column; align-items:flex-start; gap:6px; padding:14px;">';
+        html += '<div style="display:flex; justify-content:space-between; width:100%;"><b>' + (l.normalized_cnj || 'Sem CNJ') + '</b><span>' + (PRIORIDADE_LABEL[l.priority] || l.priority) + ' (' + l.confidence_score + ')</span></div>';
+        html += '<div style="font-size:13px;">' + escapeHtml(l.tribunal || '') + ' · ' + escapeHtml(l.signal_type || '') + ' · status: ' + escapeHtml(l.status) + '</div>';
+        html += '<div style="font-size:13px; color:var(--ink-soft, #666);">' + escapeHtml(l.next_action || '') + '</div>';
+        html += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">';
+        if (l.bot_job_id) html += '<a class="cert-copy-btn" style="text-decoration:none;" href="/api/bots/jobs/' + l.bot_job_id + '/dossie" target="_blank" rel="noopener">Abrir dossiê →</a>';
+        else html += '<button class="cert-copy-btn" type="button" data-run-bots="' + l.id + '">Rodar bots</button>';
+        html += '<button class="cert-copy-btn" type="button" data-mark-contacted="' + l.id + '">Marcar contatado</button>';
+        html += '<button class="cert-copy-btn" type="button" data-dismiss="' + l.id + '">Descartar</button>';
+        html += '</div></div>';
+      });
+      el('leadsListaArea').innerHTML = html;
+
+      el('leadsListaArea').querySelectorAll('[data-run-bots]').forEach((btn) => btn.addEventListener('click', async () => {
+        btn.textContent = 'Rodando...';
+        try { await apiFetch('/api/leads/' + btn.dataset.runBots + '/run-bots', { method: 'POST', headers: buildHeaders(true) }); carregarLeads(); }
+        catch (e) { btn.textContent = 'Erro'; }
+      }));
+      el('leadsListaArea').querySelectorAll('[data-dismiss]').forEach((btn) => btn.addEventListener('click', async () => {
+        await apiFetch('/api/leads/' + btn.dataset.dismiss + '/dismiss', { method: 'POST', headers: buildHeaders(true) });
+        carregarLeads();
+      }));
+      el('leadsListaArea').querySelectorAll('[data-mark-contacted]').forEach((btn) => btn.addEventListener('click', async () => {
+        await apiFetch('/api/leads/' + btn.dataset.markContacted + '/mark-contacted', { method: 'POST', headers: buildHeaders(true) });
+        carregarLeads();
+      }));
+    } catch (e) {
+      el('leadsListaArea').innerHTML = simpleMessage('Não consegui carregar os leads: ' + e.message, 'error');
+    }
+  }
+
+  el('btnRodarWatchers').addEventListener('click', async () => {
+    el('watcherStatusArea').innerHTML = simpleLoading('Rodando robôs...');
+    try {
+      const status = await apiFetch('/api/watchers/status', { method: 'GET', headers: buildHeaders(true) });
+      let html = '<div class="dados-faltantes-box"><b>Agendamento:</b> ' + escapeHtml(status.agendamento) + '</div>';
+      el('watcherStatusArea').innerHTML = html;
+      await apiFetch('/api/watchers/run', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify({}) });
+      carregarLeads();
+    } catch (e) {
+      el('watcherStatusArea').innerHTML = simpleMessage('Não consegui rodar os robôs: ' + e.message, 'error');
+    }
+  });
 
   // ---------- Diagnóstico DataJud por tribunal (v31d) ----------
 
