@@ -18,6 +18,10 @@ def looks_like_cnj(value: str | None) -> bool:
 
 FEDERAL_TR_MAP = {'01': 'TRF1', '02': 'TRF2', '03': 'TRF3', '04': 'TRF4', '05': 'TRF5', '06': 'TRF6'}
 
+# Numeração oficial dos TRTs (Justiça do Trabalho, segmento "5"), confirmada
+# no Portal do CNJ (cnj.jus.br/poder-judiciario/tribunais/) em 2026-07-06.
+TRABALHISTA_TR_MAP = {f'{i:02d}': f'TRT{i}' for i in range(1, 25)}
+
 # Ordem alfabética oficial da Justiça Estadual (segmento "8"), conforme a
 # própria estrutura definida pelo CNJ (Resolução 65/2008): cada TJ recebeu um
 # número de 01 a 27 seguindo a ordem alfabética dos estados. Fonte pública,
@@ -50,9 +54,10 @@ def infer_federal_tribunal(value: str | None) -> str | None:
 
 def infer_tribunal_from_cnj(value: str | None) -> str | None:
     """Versão mais ampla: infere o tribunal provável pra Justiça Federal
-    (segmento 4) OU Justiça Estadual/DF (segmento 8), a partir dos próprios
-    dígitos do CNJ. Pra outros segmentos (trabalhista, eleitoral, militar,
-    tribunais superiores), devolve None — não são cobertos ainda."""
+    (segmento 4), Justiça do Trabalho (segmento 5) ou Justiça Estadual/DF
+    (segmento 8), a partir dos próprios dígitos do CNJ. Pra outros
+    segmentos (eleitoral, militar, tribunais superiores), devolve None —
+    não são cobertos ainda."""
     n = normalize_cnj(value)
     if len(n) != 20:
         return None
@@ -60,6 +65,8 @@ def infer_tribunal_from_cnj(value: str | None) -> str | None:
     tribunal_codigo = n[14:16]
     if segmento == '4':
         return FEDERAL_TR_MAP.get(tribunal_codigo)
+    if segmento == '5':
+        return TRABALHISTA_TR_MAP.get(tribunal_codigo)
     if segmento == '8':
         return ESTADUAL_TR_MAP.get(tribunal_codigo)
     return None
