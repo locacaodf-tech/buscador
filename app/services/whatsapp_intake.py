@@ -205,8 +205,32 @@ def mascarar_documentos_no_texto(texto: str) -> str:
     versão mascarada — usado pra nunca devolver o texto_original com
     documento em claro na resposta da API (achado real: eu excluía as
     chaves 'cpf'/'cnpj' da resposta, mas o texto_original ecoado ainda
-    trazia o número completo do jeito que a pessoa digitou)."""
-    resultado = texto
+    trazia o número completo do jeito que a pessoa digitou).
+
+    Protege primeiro os trechos que já são CNJ (achado real de auditoria:
+    um CNJ de 20 dígitos contém, por coincidência, uma sequência de 11
+    dígitos que a regex solta de CPF capturava e mascarava, corrompendo o
+    próprio número do processo na tela — ex.: "00007659720235070016"
+    virava "000076597202.***.***-16"). A mesma proteção que já existia na
+    extração de CPF/CNPJ (processar_mensagem) precisa valer aqui também,
+    já que são dois pontos de código diferentes sobre o mesmo texto."""
+    cnj_candidatos = extrair_cnj_candidatos(texto)
+
+    # Substitui cada CNJ encontrado por um marcador temporário único,
+    # protegendo-o de qualquer regex de CPF/CNPJ que rode depois — e
+    # devolve ao final, intacto, no lugar exato de onde saiu.
+    protegido = texto
+    marcadores: dict[str, str] = {}
+    for i, cnj_raw in enumerate(cnj_candidatos):
+        marcador = f'\x00CNJ{i}\x00'
+        # acha o trecho exato (com pontuação original, se houver) que gerou esse CNJ
+        for match in re.finditer(r'[\d][\d.\-/\s]{18,30}[\d]', protegido):
+            if only_digits(match.group(0)) == cnj_raw and match.group(0) not in marcadores.values():
+                marcadores[marcador] = match.group(0)
+                protegido = protegido.replace(match.group(0), marcador, 1)
+                break
+
+    resultado = protegido
     for match in re.finditer(r'\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)', resultado):
         digitos = only_digits(match.group(0))
         if len(digitos) == 11:
@@ -215,6 +239,9 @@ def mascarar_documentos_no_texto(texto: str) -> str:
         digitos = only_digits(match.group(0))
         if len(digitos) == 14:
             resultado = resultado.replace(match.group(0), mask_document(digitos))
+
+    for marcador, original in marcadores.items():
+        resultado = resultado.replace(marcador, original)
     return resultado
 
 
