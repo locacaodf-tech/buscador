@@ -247,6 +247,53 @@ def test_cpf_nao_e_extraido_de_dentro_do_cnj():
     assert r['cpf'] is None
 
 
+# ---------------------------------------------------------------------------
+# Achado de auditoria externa (GPT): mascarar_documentos_no_texto corrompia
+# o CNJ, mascarando um trecho dele como se fosse CPF. Corrigido protegendo
+# os spans de CNJ antes de aplicar a máscara de CPF/CNPJ.
+# ---------------------------------------------------------------------------
+
+def test_mascarar_texto_com_cnj_sem_cpf_nao_corrompe_o_cnj():
+    """Este é o bug exato reportado: 'O número 00007659720235070016.
+    Fortaleza/CE.' virava 'O número 000076597202.***.***-16...' — o CNJ
+    não pode ser mascarado nunca, com ou sem pontuação."""
+    r = whatsapp_intake.mascarar_documentos_no_texto('O número 00007659720235070016. Fortaleza/CE.')
+    assert '00007659720235070016' in r
+    assert '***' not in r
+
+
+def test_mascarar_texto_com_cnj_sem_pontuacao_mais_cpf_preserva_cnj_e_mascara_cpf():
+    r = whatsapp_intake.mascarar_documentos_no_texto('00007659720235070016. CPF 123.456.789-09.')
+    assert '00007659720235070016' in r
+    assert '123.***.***-09' in r
+    assert '123.456.789-09' not in r
+
+
+def test_mascarar_texto_com_cnj_pontuado_mais_cpf_preserva_cnj_e_mascara_cpf():
+    r = whatsapp_intake.mascarar_documentos_no_texto('Processo 5000563-34.2022.4.03.6331. CPF 123.456.789-09.')
+    assert '5000563-34.2022.4.03.6331' in r
+    assert '123.***.***-09' in r
+    assert '123.456.789-09' not in r
+
+
+def test_mascarar_texto_com_cnpj_real_mascara_cnpj():
+    r = whatsapp_intake.mascarar_documentos_no_texto('CNPJ 11.222.333/0001-81 da empresa')
+    assert '11.222.333/0001-81' not in r
+    assert '11.***.***/****-81' in r
+
+
+def test_resposta_publica_do_endpoint_manual_nunca_expoe_cpf_cnpj_completo_nem_corrompe_cnj():
+    """Teste end-to-end pelo endpoint real, reproduzindo exatamente o
+    cenário da auditoria: CNJ sem CPF no texto."""
+    client = TestClient(app)
+    resp = client.post('/api/intake/whatsapp/manual', json={'texto': 'O número 00007659720235070016. Fortaleza/CE.'})
+    texto_resposta = resp.text
+    assert '00007659720235070016' in texto_resposta  # CNJ precisa continuar legível
+    assert '000076597202' not in texto_resposta or '000076597202.***' not in texto_resposta  # não pode ter sido corrompido
+    body = resp.json()
+    assert body['dados_extraidos']['texto_original'] == 'O número 00007659720235070016. Fortaleza/CE.'
+
+
 def test_dados_faltantes_lista_o_que_realmente_falta():
     r = whatsapp_intake.processar_mensagem('oi')
     assert 'Número do processo/CNJ' in r['dados_faltantes']
