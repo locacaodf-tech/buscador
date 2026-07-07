@@ -757,17 +757,29 @@ async def datajud_diagnostico_endpoint(cnj: str, tribunal: str | None = None):
 
 @app.get('/api/watchers/status', dependencies=[Depends(verify_internal_token)])
 def watchers_status():
-    """v32 — o que existe hoje, e com que grau de automação real.
-    Honesto: nada roda sozinho ainda sem um cron configurado (ver
-    /api/watchers/run para o gatilho manual, e o relatório da entrega
-    pra opções de agendamento externo)."""
+    """v32.1 — o que existe hoje, e com que grau de automação real."""
+    from .config import get_settings
+    settings_local = get_settings()
+    auto_run_bots = getattr(settings_local, 'watchers_auto_run_bots', False)
     return {
         'watchers': [
             {'name': 'publication_watcher', 'descricao': 'Classifica publicações fornecidas (fixture local ou fonte externa que você conectar) em sinais de oportunidade.', 'fonte': 'fixture_ou_externa'},
             {'name': 'datajud_movement_watcher', 'descricao': 'Revarre CNJs já conhecidos no DataJud, procurando movimentação nova compatível com sinal de interesse.', 'fonte': 'datajud_real'},
             {'name': 'stj_official_file_watcher', 'descricao': 'Roda o sync oficial do STJ (v30.2) e cria lead pra registro novo desde a última rodada.', 'fonte': 'stj_real'},
         ],
-        'agendamento': 'Nenhum cron ativo agora — acione via POST /api/watchers/run manualmente, ou configure um cron externo gratuito (ex.: cron-job.org) apontando pra esse endpoint. Cron nativo do Render não tem tier gratuito.',
+        'bots_automaticos': {
+            'ativado': auto_run_bots,
+            'descricao': 'Bots automáticos ' + ('ativados' if auto_run_bots else 'desativados') + ' — leads de prioridade alta ' + ('acionam bots sozinhos quando o watcher roda.' if auto_run_bots else 'precisam do botão "Rodar bots" (padrão, pra não sobrecarregar).'),
+            'variavel_de_ambiente': 'WATCHERS_AUTO_RUN_BOTS',
+        },
+        'agendamento': {
+            'cron_nativo_ativo': False,
+            'motivo': 'Render Cron Job custa no mínimo US$ 1/mês — sem tier gratuito.',
+            'alternativa_gratuita': 'Configure um cron externo gratuito (ex.: cron-job.org) fazendo POST diário em /api/watchers/run.',
+            'endpoint': '/api/watchers/run', 'metodo': 'POST',
+            'headers_necessarios': 'X-Internal-Token (se INTERNAL_API_TOKEN estiver configurado)',
+            'horario_sugerido': '06:00 (antes do expediente)',
+        },
     }
 
 
@@ -802,7 +814,7 @@ async def watchers_run(request: Request, db: Session = Depends(get_db)):
     if watcher_especifico:
         from .watchers.scheduler import rodar_watcher
         resultado = await rodar_watcher(db, watcher_especifico, publicacoes_fixture=publicacoes, cnjs_conhecidos=cnjs)
-        return {watcher_especifico: resultado}
+        return {'overall_status': resultado.get('status'), 'watchers': {watcher_especifico: resultado}}
 
     from .watchers.scheduler import rodar_todos_os_watchers
     return await rodar_todos_os_watchers(db, publicacoes_fixture=publicacoes, cnjs_conhecidos=cnjs)
@@ -916,6 +928,28 @@ def lead_mark_contacted(lead_id: int, db: Session = Depends(get_db)):
     lead.status = 'contatado'
     db.commit()
     return {'lead_id': lead.id, 'status': lead.status}
+
+
+@app.get('/api/leads/{lead_id}/dossie', response_class=HTMLResponse)
+def lead_dossie(lead_id: int, request: Request, db: Session = Depends(get_db)):
+    """v32.1 — dossiê do lead em si, funciona mesmo antes de rodar bots
+    (achado real: só existia dossiê do BotJob, que exige ter rodado bots
+    primeiro — agora o lead tem uma página própria desde o momento em
+    que é criado)."""
+    if settings.app_login_password and not _has_valid_session(request):
+        return RedirectResponse(url='/login', status_code=303)
+    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
+    status_labels = {'novo': 'Novo', 'contatado': 'Contatado', 'descartado': 'Descartado'}
+    prioridade_labels = {'alta': 'Alta', 'media': 'Média', 'baixa': 'Baixa'}
+    from .services.whatsapp_intake import mascarar_documentos_no_texto
+    texto_mascarado = mascarar_documentos_no_texto(lead.publication_text) if lead.publication_text else None
+    return templates.TemplateResponse(request, 'lead_dossie.html', {
+        'lead': lead, 'status_label': status_labels.get(lead.status, lead.status),
+        'prioridade_label': prioridade_labels.get(lead.priority, lead.priority),
+        'publication_text_mascarado': texto_mascarado,
+    })
 
 
 @app.get('/api/whatsapp/webhook')
