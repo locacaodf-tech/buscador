@@ -187,10 +187,40 @@ def extrair_cidade_uf(texto: str) -> dict[str, str | None]:
 
 
 def extrair_ente_devedor(texto: str) -> str | None:
+    """Acha o ente devedor — prioriza o rótulo explícito (Polo Passivo,
+    Réu, Executado, Ente devedor), que é mais preciso que só procurar
+    palavra-chave solta no texto. Sem rótulo, cai pra busca de palavra-
+    chave, mas capturando o nome completo (ex.: 'Estado de Goiás', não só
+    'Estado' — achado real: a versão antiga cortava no meio, perdendo a
+    informação que mais importa: QUAL estado/município)."""
+    match_rotulo = re.search(
+        r'(?:polo\s+passivo|r[ée]u|executado|ente\s+devedor)\s*[:\s]+([^\n.]{3,80})',
+        texto, re.IGNORECASE,
+    )
+    if match_rotulo:
+        return match_rotulo.group(1).strip().rstrip('.,;')
+
+    # Sem rótulo explícito: procura "Estado de X" / "Município de X" por
+    # extenso primeiro (nome completo), senão cai pro termo genérico.
+    match_estado_municipio = re.search(
+        r'\b((?:Estado|Munic[íi]pio)\s+de\s+[A-ZÀ-Ú][\wÀ-ú]*(?:\s+d[eo]\s+[A-ZÀ-Ú][\wÀ-ú]*)*)',
+        texto,
+    )
+    if match_estado_municipio:
+        return match_estado_municipio.group(1).strip()
+
     for ente in ENTES_DEVEDORES_CONHECIDOS:
         if re.search(r'\b' + re.escape(ente) + r'\b', texto, re.IGNORECASE):
             return ente
     return None
+
+
+def extrair_tipo_acao(texto: str) -> str | None:
+    """Acha 'Tipo de ação:' / 'Assunto:' / 'Classe:' — sem isso, mensagens
+    estruturadas de cliente (ex.: prints de sistema com campos rotulados)
+    perdiam justamente o dado que classifica o tipo de crédito potencial."""
+    match = re.search(r'(?:tipo\s+de\s+a[çc][ãa]o|assunto|classe)\s*[:\s]+([^\n.]{3,80})', texto, re.IGNORECASE)
+    return match.group(1).strip().rstrip('.,;') if match else None
 
 
 def analisar_cnj(cnj_normalizado: str) -> dict[str, Any]:
@@ -400,6 +430,7 @@ def processar_mensagem(texto: str) -> dict[str, Any]:
     nome = extrair_nome(texto)
     cidade_uf = extrair_cidade_uf(texto)
     ente_devedor = extrair_ente_devedor(texto)
+    tipo_acao = extrair_tipo_acao(texto)
     classe_documento = detectar_classe_documento(texto)
     eh_requisitorio_precatorio = eh_documento_requisitorio_ou_precatorio(texto)
     valor_causa = extrair_valor_causa(texto)
@@ -456,6 +487,7 @@ def processar_mensagem(texto: str) -> dict[str, Any]:
         'cidade': cidade_uf.get('cidade'),
         'uf': cidade_uf.get('uf'),
         'ente_devedor': ente_devedor,
+        'tipo_acao': tipo_acao,
         'classe_documento': classe_documento,
         'eh_requisitorio_ou_precatorio': eh_requisitorio_precatorio,
         'valor_causa': valor_causa,
