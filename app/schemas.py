@@ -282,3 +282,12 @@ class BotsRunRequest(BaseModel):
 class BotsResumeRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     captcha_text: str
+
+
+class IntakeWhatsappManualRequest(BaseModel):
+    """v31 — recebe texto colado de conversa/mensagem do WhatsApp."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    texto: str
+    telefone: str | None = None
+    origem: str = 'whatsapp_manual'
