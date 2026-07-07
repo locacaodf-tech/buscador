@@ -35,6 +35,19 @@
     <p>{{ job.resumo_humano or 'Sem resumo disponível.' }}</p>
   </section>
 
+  {% if job.raw and job.raw.contexto_documento and (job.raw.contexto_documento.classe_documento or job.raw.contexto_documento.processo_referencia) %}
+  <section>
+    <div class="rotulo-secao">Contexto extraído do documento</div>
+    <div class="step-card">
+      {% if job.raw.contexto_documento.classe_documento %}<div class="step-detalhe"><b>Classe:</b> {{ job.raw.contexto_documento.classe_documento }}</div>{% endif %}
+      {% if job.raw.contexto_documento.orgao_julgador %}<div class="step-detalhe"><b>Órgão julgador:</b> {{ job.raw.contexto_documento.orgao_julgador }}</div>{% endif %}
+      {% if job.raw.contexto_documento.valor_causa %}<div class="step-detalhe"><b>Valor da causa:</b> R$ {{ job.raw.contexto_documento.valor_causa }}</div>{% endif %}
+      {% if job.raw.contexto_documento.eh_requisitorio_ou_precatorio %}<div class="step-detalhe">📋 Documento identificado como ofício requisitório/precatório.</div>{% endif %}
+      {% if job.raw.contexto_documento.processo_referencia %}<div class="step-detalhe"><b>Processo referência:</b> {{ job.raw.contexto_documento.processo_referencia.cnj_normalizado }} ({{ job.raw.contexto_documento.processo_referencia.tribunal_provavel }})</div>{% endif %}
+    </div>
+  </section>
+  {% endif %}
+
   <section>
     <div class="rotulo-secao">Bots executados</div>
     {% if steps %}
