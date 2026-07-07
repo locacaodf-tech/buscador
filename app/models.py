@@ -215,3 +215,75 @@ class IntakeCase(Base):
     job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     job_id_referencia: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default='processado')
+
+
+class WatcherRun(Base):
+    """v32 — uma execução de um robô diário (watcher). Registra tudo, uma
+    fonte falhando não impede as outras de terminar."""
+
+    __tablename__ = 'watcher_runs'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    watcher_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default='running')  # running|completed|partial|failed
+    date_from: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    date_to: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    tribunals_scanned: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    total_publications: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_matches: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_leads_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class PublicationHit(Base):
+    """v32 — uma publicação/movimentação encontrada por um watcher que
+    bateu com algum termo de interesse."""
+
+    __tablename__ = 'publication_hits'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    watcher_run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    tribunal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    publication_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    process_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    normalized_cnj: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    parties_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lawyers_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    publication_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    matched_terms: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    signal_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class OpportunityLead(Base):
+    """v32 — uma oportunidade comercial gerada a partir de um PublicationHit
+    (ou de outra fonte de sinal), já pontuada e priorizada."""
+
+    __tablename__ = 'opportunity_leads'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    process_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    normalized_cnj: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    tribunal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    segment: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    uf: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    debtor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    creditor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    creditor_document_masked: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    lawyer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signal_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    phase: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    estimated_opportunity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    confidence_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    priority: Mapped[str] = mapped_column(String(10), nullable=False, default='baixa')  # alta|media|baixa
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default='novo')  # novo|contatado|descartado
+    bot_job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dossie_url: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
