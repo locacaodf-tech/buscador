@@ -577,6 +577,13 @@ async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Sessi
     if dados['processos_detectados']:
         bots_resultado = await intake_bot.acionar_bots_para_caso(dados, db=db)
         if bots_resultado:
+            bots_resultado['contexto_documento'] = {
+                'classe_documento': dados.get('classe_documento'),
+                'eh_requisitorio_ou_precatorio': dados.get('eh_requisitorio_ou_precatorio'),
+                'valor_causa': dados.get('valor_causa'),
+                'orgao_julgador': dados.get('orgao_julgador'),
+                'processo_referencia': dados.get('processo_referencia'),
+            }
             job = BotJob(
                 input_original=dados['processos_detectados'][0]['cnj_normalizado'],
                 tipo_identificado=bots_resultado['tipo_identificado'], objetivo='completo',
@@ -597,10 +604,70 @@ async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Sessi
             db.commit()
             job_id = job.id
 
+    # v31f: se o documento cita um processo referência (ex.: ação
+    # rescisória apontando pro processo original), consulta ele também —
+    # não fica só no processo principal.
+    job_id_referencia = None
+    if dados.get('processo_referencia'):
+        dados_ref = {'processos_detectados': [dados['processo_referencia']]}
+        bots_resultado_ref = await intake_bot.acionar_bots_para_caso(dados_ref, db=db)
+        if bots_resultado_ref:
+            job_ref = BotJob(
+                input_original=dados['processo_referencia']['cnj_normalizado'],
+                tipo_identificado=bots_resultado_ref['tipo_identificado'], objetivo='completo',
+                status=bots_resultado_ref['status'], resumo_humano='Processo referência citado no documento — ' + bots_resultado_ref['resumo_humano'],
+                proxima_acao=bots_resultado_ref['proxima_acao_recomendada'], raw=bots_resultado_ref,
+            )
+            db.add(job_ref)
+            db.commit()
+            db.refresh(job_ref)
+            for passo in bots_resultado_ref['bots_executados']:
+                evidence_ids = passo.get('evidence_ids') or []
+                db.add(BotStep(
+                    job_id=job_ref.id, bot_name=passo['bot_id'], status=passo['status'],
+                    finished_at=datetime.now(timezone.utc) if passo['status'] != 'waiting_user' else None,
+                    resultado=passo.get('resultado'), warning='; '.join(passo.get('warnings') or []) or None,
+                    next_action=passo.get('next_action'), evidence_id=evidence_ids[0] if evidence_ids else None,
+                ))
+            db.commit()
+            job_id_referencia = job_ref.id
+
+    # v31e/v31f: quando o DataJud não encontrou nada, mas o documento traz
+    # contexto rico (classe, requisitório/precatório, processo referência),
+    # a próxima ação deve usar esse contexto — nunca só "não encontrado",
+    # e tem prioridade sobre o genérico "peça CPF/nome" (achado real: como
+    # CPF/nome quase sempre faltam numa mensagem só com o número do
+    # processo, o genérico sempre ganhava e a mensagem rica nunca aparecia).
+    proxima_acao = dados['divergencias'][0] if dados['divergencias'] else None
+    if not proxima_acao and job_id:
+        job_criado = db.query(BotJob).filter(BotJob.id == job_id).first()
+        datajud_sem_resultado = job_criado and job_criado.status in {'partial', 'failed'}
+        if datajud_sem_resultado and dados.get('classe_documento') == 'Ação Rescisória' and dados.get('processo_referencia'):
+            tribunal = dados['processos_detectados'][0].get('tribunal_provavel') if dados['processos_detectados'] else None
+            proxima_acao = (
+                f"CNJ válido e tribunal inferido: {tribunal}. A consulta DataJud não retornou resultado para este número. "
+                f"Como o documento indica ação rescisória e traz processo referência, consulte também o processo "
+                f"referência {dados['processo_referencia']['cnj_normalizado']}."
+            )
+        elif datajud_sem_resultado and dados.get('eh_requisitorio_ou_precatorio') and dados['processos_detectados']:
+            tribunal = dados['processos_detectados'][0].get('tribunal_provavel')
+            sufixo = dados['processos_detectados'][0].get('sufixo')
+            proxima_acao = (
+                f'Consultamos o DataJud para o {tribunal} usando o CNJ base {dados["processos_detectados"][0]["cnj_normalizado"]}'
+                + (f' (o sufixo /{sufixo} do documento indica incidente/desdobramento, não faz parte do CNJ em si)' if sufixo else '')
+                + f', mas não houve retorno. Como o documento é um ofício requisitório/precatório, a fonte principal '
+                + f'de confirmação deve ser o {tribunal}/DEPRE (órgão de precatórios do tribunal).'
+            )
+    if not proxima_acao and dados['dados_faltantes']:
+        proxima_acao = f"Peça também: {', '.join(dados['dados_faltantes'])}"
+    if not proxima_acao:
+        proxima_acao = 'Bots acionados — confira o dossiê.'
+
     case = IntakeCase(
         lead_id=lead.id, input_original=request.texto, dados_extraidos=dados,
         processos_detectados=dados['processos_detectados'], divergencias=dados['divergencias'],
-        dados_faltantes=dados['dados_faltantes'], resposta_sugerida=resposta_sugerida, job_id=job_id,
+        dados_faltantes=dados['dados_faltantes'], resposta_sugerida=resposta_sugerida,
+        job_id=job_id, job_id_referencia=job_id_referencia,
     )
     db.add(case)
     db.commit()
@@ -614,11 +681,15 @@ async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Sessi
             'texto_original': whatsapp_intake.mascarar_documentos_no_texto(dados['texto_original']),
         },
         'processos_detectados': dados['processos_detectados'],
+        'processo_referencia': dados.get('processo_referencia'),
+        'classe_documento': dados.get('classe_documento'),
+        'eh_requisitorio_ou_precatorio': dados.get('eh_requisitorio_ou_precatorio'),
         'divergencias': dados['divergencias'],
         'dados_faltantes': dados['dados_faltantes'],
-        'proxima_acao': dados['divergencias'][0] if dados['divergencias'] else (dados['dados_faltantes'] and f"Peça também: {', '.join(dados['dados_faltantes'])}") or 'Bots acionados — confira o dossiê.',
+        'proxima_acao': proxima_acao,
         'resposta_sugerida': resposta_sugerida,
         'job_id': job_id,
+        'job_id_referencia': job_id_referencia,
         'evidence_id': evidence_id,
     }
 
