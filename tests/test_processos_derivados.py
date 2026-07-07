@@ -139,6 +139,13 @@ def test_g_resultado_visual_nao_diz_apenas_nao_encontrado():
 
 
 def test_h_dossie_mostra_processo_principal_referencia_classe_valor():
+    from app.models import OpportunityLead
+    from app.db import SessionLocal
+    db_limpeza = SessionLocal()
+    db_limpeza.query(OpportunityLead).delete()
+    db_limpeza.commit()
+    db_limpeza.close()
+
     client = TestClient(app)
     resp = client.post('/api/intake/whatsapp/manual', json={'texto': TEXTO_ACAO_RESCISORIA})
     job_id = resp.json()['job_id']
