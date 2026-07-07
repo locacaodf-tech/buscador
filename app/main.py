@@ -654,6 +654,17 @@ async def intake_whatsapp_screenshot(
     }
 
 
+@app.get('/api/datajud/diagnostico/{cnj}', dependencies=[Depends(verify_internal_token)])
+async def datajud_diagnostico_endpoint(cnj: str, tribunal: str | None = None):
+    """v31d — Auditoria multi-tribunal: mostra exatamente qual alias e
+    endpoint do DataJud foram consultados pra este CNJ específico, o
+    status HTTP, e se foi encontrado/vazio/erro/alias não configurado.
+    Não é 'mais uma suposição' — chama o DataJud de verdade pro tribunal
+    inferido (ou informado) e reporta o que aconteceu."""
+    from .services.datajud_diagnostico import diagnosticar_cnj
+    return await diagnosticar_cnj(cnj, tribunal)
+
+
 @app.get('/api/whatsapp/webhook')
 def whatsapp_webhook_verify(request: Request):
     """Verificação do webhook da Meta (WhatsApp Business Cloud API) —
