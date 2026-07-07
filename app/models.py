@@ -213,4 +213,5 @@ class IntakeCase(Base):
     dados_faltantes: Mapped[list | None] = mapped_column(JSON, nullable=True)
     resposta_sugerida: Mapped[str | None] = mapped_column(Text, nullable=True)
     job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    job_id_referencia: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default='processado')
