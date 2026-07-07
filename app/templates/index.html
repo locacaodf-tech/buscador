@@ -1878,7 +1878,7 @@
       processos.forEach((p) => {
         html += '<div class="stj-result-card">';
         html += '<div class="stj-result-headline">📄 Processo identificado</div>';
-        html += campoResultado('CNJ normalizado', p.cnj_normalizado);
+        html += campoResultado('CNJ normalizado', p.cnj_normalizado + (p.sufixo ? '/' + p.sufixo : ''));
         html += campoResultado('Segmento', p.segmento_nome);
         html += campoResultado('Tribunal provável', p.tribunal_provavel);
         if (p.ufs_cobertas) html += campoResultado('Abrangência (UFs cobertas)', p.ufs_cobertas.join(', '));
@@ -1887,6 +1887,22 @@
       });
     } else {
       html += simpleMessage('Não achei um número de processo/CNJ reconhecível nessa mensagem.', 'info');
+    }
+
+    if (data.classe_documento || data.eh_requisitorio_ou_precatorio) {
+      html += '<div class="stj-result-card">';
+      if (data.classe_documento) html += campoResultado('Classe do documento', data.classe_documento);
+      if (data.eh_requisitorio_ou_precatorio) html += campoResultado('Tipo', 'Ofício requisitório/precatório');
+      html += '</div>';
+    }
+
+    if (data.processo_referencia) {
+      const ref = data.processo_referencia;
+      html += '<div class="stj-result-card">';
+      html += '<div class="stj-result-headline">🔗 Processo referência (citado no documento)</div>';
+      html += campoResultado('CNJ normalizado', ref.cnj_normalizado + (ref.sufixo ? '/' + ref.sufixo : ''));
+      html += campoResultado('Tribunal provável', ref.tribunal_provavel);
+      html += '</div>';
     }
 
     if (data.divergencias && data.divergencias.length) {
