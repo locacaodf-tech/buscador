@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dossiê do lead #{{ lead.id }}</title>
+  <style>
+    :root { --navy: #0b1f3d; --ink: #1f2937; --ink-soft: #6b7280; --border: #e5e7eb; --success: #166534; --success-bg: #dcfce7; --warn-bg: #fef3c7; --fail-bg: #fee2e2; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--ink); background: #fff; margin: 0; padding: 24px; max-width: 800px; margin-inline: auto; line-height: 1.6; }
+    h1 { font-size: 22px; color: var(--navy); margin-bottom: 4px; }
+    .subtitulo { color: var(--ink-soft); font-size: 14px; margin-bottom: 20px; }
+    .badge { display: inline-block; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; margin-bottom: 14px; margin-right: 8px; }
+    .prioridade-alta { background: var(--fail-bg); color: #991b1b; }
+    .prioridade-media { background: var(--warn-bg); color: #92400e; }
+    .prioridade-baixa { background: #f3f4f6; color: #4b5563; }
+    section { margin-bottom: 20px; }
+    .rotulo-secao { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--navy); border-bottom: 2px solid var(--border); padding-bottom: 6px; margin-bottom: 10px; }
+    .campo { margin-bottom: 8px; font-size: 14px; }
+    .proxima-acao { background: var(--navy); color: #fff; padding: 16px 18px; border-radius: 12px; font-weight: 600; }
+    .link-bot { display: inline-block; margin-top: 10px; padding: 10px 16px; background: var(--success-bg); color: var(--success); border-radius: 8px; text-decoration: none; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Dossiê do lead #{{ lead.id }}</h1>
+  <p class="subtitulo">Encontrado em {{ lead.created_at.strftime('%d/%m/%Y %H:%M') }} UTC · Fonte: {{ lead.source }} · Visto {{ lead.seen_count }}x</p>
+  <span class="badge prioridade-{{ lead.priority }}">Prioridade {{ prioridade_label }}</span>
+  <span class="badge" style="background:#e5e7eb; color:#374151;">Status: {{ status_label }}</span>
+  <span class="badge" style="background:#e5e7eb; color:#374151;">Score: {{ lead.confidence_score }}</span>
+
+  <section>
+    <div class="rotulo-secao">Processo</div>
+    <div class="campo"><b>CNJ:</b> {{ lead.normalized_cnj or 'Não identificado' }}</div>
+    <div class="campo"><b>Tribunal:</b> {{ lead.tribunal or '—' }}</div>
+    <div class="campo"><b>Sinal encontrado:</b> {{ lead.signal_type or '—' }}</div>
+    {% if lead.matched_terms %}<div class="campo"><b>Termos que bateram:</b> {{ lead.matched_terms|join(', ') }}</div>{% endif %}
+    {% if lead.debtor %}<div class="campo"><b>Ente devedor:</b> {{ lead.debtor }}</div>{% endif %}
+  </section>
+
+  {% if publication_text_mascarado %}
+  <section>
+    <div class="rotulo-secao">Trecho da publicação</div>
+    <p style="font-style:italic;">{{ publication_text_mascarado }}</p>
+  </section>
+  {% endif %}
+
+  <section>
+    <div class="rotulo-secao">Bots</div>
+    {% if lead.bot_job_id %}
+      <p>Bots já rodaram pra este lead (job #{{ lead.bot_job_id }}).</p>
+      <a class="link-bot" href="{{ lead.dossie_url }}" target="_blank" rel="noopener">Abrir dossiê dos bots →</a>
+    {% else %}
+      <p>Bots ainda não rodaram pra este lead — use o botão "Rodar bots" na tela, ou POST /api/leads/{{ lead.id }}/run-bots.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <div class="rotulo-secao">Próxima ação recomendada</div>
+    <div class="proxima-acao">{{ lead.next_action or 'Nenhuma ação recomendada registrada.' }}</div>
+  </section>
+</body>
+</html>
