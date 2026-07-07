@@ -26,7 +26,7 @@ from .bots import runner as bots_runner
 from .bots import intake_bot
 from .bots.portal_bot import PortalBot
 from .services import manual_evidence
-from .models import CertificateRecord, ManualEvidence, DiligenciaLog, BotJob, BotStep, Lead, WhatsAppMessage, IntakeCase
+from .models import CertificateRecord, ManualEvidence, DiligenciaLog, BotJob, BotStep, Lead, WhatsAppMessage, IntakeCase, WatcherRun, PublicationHit, OpportunityLead
 from .services.portal_automation import PORTAL_AUTOMATION_STUBS
 from .services.orchestrator import ProcessLookupOrchestrator, provider_capabilities
 from .connectors.tribunal_registry import ALL_TRIBUNALS, FEDERAL_TRIBUNALS, DEFAULT_PRECAT_TRIBUNALS
@@ -753,6 +753,169 @@ async def datajud_diagnostico_endpoint(cnj: str, tribunal: str | None = None):
     inferido (ou informado) e reporta o que aconteceu."""
     from .services.datajud_diagnostico import diagnosticar_cnj
     return await diagnosticar_cnj(cnj, tribunal)
+
+
+@app.get('/api/watchers/status', dependencies=[Depends(verify_internal_token)])
+def watchers_status():
+    """v32 — o que existe hoje, e com que grau de automação real.
+    Honesto: nada roda sozinho ainda sem um cron configurado (ver
+    /api/watchers/run para o gatilho manual, e o relatório da entrega
+    pra opções de agendamento externo)."""
+    return {
+        'watchers': [
+            {'name': 'publication_watcher', 'descricao': 'Classifica publicações fornecidas (fixture local ou fonte externa que você conectar) em sinais de oportunidade.', 'fonte': 'fixture_ou_externa'},
+            {'name': 'datajud_movement_watcher', 'descricao': 'Revarre CNJs já conhecidos no DataJud, procurando movimentação nova compatível com sinal de interesse.', 'fonte': 'datajud_real'},
+            {'name': 'stj_official_file_watcher', 'descricao': 'Roda o sync oficial do STJ (v30.2) e cria lead pra registro novo desde a última rodada.', 'fonte': 'stj_real'},
+        ],
+        'agendamento': 'Nenhum cron ativo agora — acione via POST /api/watchers/run manualmente, ou configure um cron externo gratuito (ex.: cron-job.org) apontando pra esse endpoint. Cron nativo do Render não tem tier gratuito.',
+    }
+
+
+def _fixture_publicacoes_exemplo() -> list[dict]:
+    """Fixture de demonstração — mostra a esteira completa funcionando
+    sem depender de fonte externa (ver RELATORIO_V32 pra explicação
+    honesta sobre acesso real ao DJEN). Vive dentro do próprio pacote da
+    aplicação (não em tests/), garantindo que existe em produção também."""
+    import json
+    from pathlib import Path
+    caminho = Path(__file__).parent / 'watchers' / 'sample_data' / 'publicacoes_exemplo.json'
+    if caminho.exists():
+        return json.loads(caminho.read_text(encoding='utf-8'))
+    return []
+
+
+@app.post('/api/watchers/run', dependencies=[Depends(verify_internal_token)])
+async def watchers_run(request: Request, db: Session = Depends(get_db)):
+    """v32 — aciona os watchers manualmente. Corpo opcional:
+    {"watcher": "nome_especifico", "publicacoes": [...], "cnjs": [...]}.
+    Sem "watcher", roda os 3. Sem "publicacoes" explícita, usa o fixture
+    de demonstração embutido (só pro publication_watcher)."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    watcher_especifico = body.get('watcher')
+    publicacoes = body.get('publicacoes') or _fixture_publicacoes_exemplo()
+    cnjs = body.get('cnjs')
+
+    if watcher_especifico:
+        from .watchers.scheduler import rodar_watcher
+        resultado = await rodar_watcher(db, watcher_especifico, publicacoes_fixture=publicacoes, cnjs_conhecidos=cnjs)
+        return {watcher_especifico: resultado}
+
+    from .watchers.scheduler import rodar_todos_os_watchers
+    return await rodar_todos_os_watchers(db, publicacoes_fixture=publicacoes, cnjs_conhecidos=cnjs)
+
+
+@app.get('/api/watchers/runs', dependencies=[Depends(verify_internal_token)])
+def watchers_runs_list(limit: int = 50, db: Session = Depends(get_db)):
+    runs = db.query(WatcherRun).order_by(WatcherRun.id.desc()).limit(limit).all()
+    return [{
+        'id': r.id, 'watcher_name': r.watcher_name, 'status': r.status,
+        'started_at': r.started_at.isoformat(), 'finished_at': r.finished_at.isoformat() if r.finished_at else None,
+        'total_publications': r.total_publications, 'total_matches': r.total_matches,
+        'total_leads_created': r.total_leads_created, 'error': r.error,
+    } for r in runs]
+
+
+@app.get('/api/watchers/runs/{run_id}', dependencies=[Depends(verify_internal_token)])
+def watchers_run_detail(run_id: int, db: Session = Depends(get_db)):
+    run = db.query(WatcherRun).filter(WatcherRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail=f'WatcherRun {run_id} não encontrado.')
+    hits = db.query(PublicationHit).filter(PublicationHit.watcher_run_id == run_id).all()
+    return {
+        'id': run.id, 'watcher_name': run.watcher_name, 'status': run.status,
+        'total_publications': run.total_publications, 'total_matches': run.total_matches,
+        'total_leads_created': run.total_leads_created, 'error': run.error,
+        'hits': [{'id': h.id, 'tribunal': h.tribunal, 'signal_type': h.signal_type, 'normalized_cnj': h.normalized_cnj, 'matched_terms': h.matched_terms} for h in hits],
+    }
+
+
+@app.get('/api/leads', dependencies=[Depends(verify_internal_token)])
+def leads_list(status: str | None = None, priority: str | None = None, limit: int = 100, db: Session = Depends(get_db)):
+    query = db.query(OpportunityLead)
+    if status:
+        query = query.filter(OpportunityLead.status == status)
+    if priority:
+        query = query.filter(OpportunityLead.priority == priority)
+    leads = query.order_by(OpportunityLead.confidence_score.desc()).limit(limit).all()
+    return [{
+        'id': l.id, 'created_at': l.created_at.isoformat(), 'tribunal': l.tribunal,
+        'normalized_cnj': l.normalized_cnj, 'signal_type': l.signal_type, 'priority': l.priority,
+        'confidence_score': l.confidence_score, 'status': l.status, 'next_action': l.next_action,
+        'bot_job_id': l.bot_job_id,
+    } for l in leads]
+
+
+@app.get('/api/leads/{lead_id}', dependencies=[Depends(verify_internal_token)])
+def lead_detail(lead_id: int, db: Session = Depends(get_db)):
+    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
+    return {
+        'id': lead.id, 'created_at': lead.created_at.isoformat(), 'source': lead.source,
+        'process_number': lead.process_number, 'normalized_cnj': lead.normalized_cnj, 'tribunal': lead.tribunal,
+        'debtor': lead.debtor, 'signal_type': lead.signal_type, 'confidence_score': lead.confidence_score,
+        'priority': lead.priority, 'status': lead.status, 'bot_job_id': lead.bot_job_id,
+        'dossie_url': lead.dossie_url, 'next_action': lead.next_action,
+    }
+
+
+@app.post('/api/leads/{lead_id}/run-bots', dependencies=[Depends(verify_internal_token)])
+async def lead_run_bots(lead_id: int, db: Session = Depends(get_db)):
+    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
+    if not lead.normalized_cnj:
+        raise HTTPException(status_code=400, detail='Lead sem CNJ — não há o que consultar automaticamente.')
+
+    from .bots.runner import executar_bots
+    bots_resultado = await executar_bots(lead.normalized_cnj, None, lead.tribunal, 'completo', db=db)
+    job = BotJob(
+        input_original=lead.normalized_cnj, tipo_identificado=bots_resultado['tipo_identificado'],
+        objetivo='completo', status=bots_resultado['status'], resumo_humano=bots_resultado['resumo_humano'],
+        proxima_acao=bots_resultado['proxima_acao_recomendada'], raw=bots_resultado,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    for passo in bots_resultado['bots_executados']:
+        evidence_ids = passo.get('evidence_ids') or []
+        db.add(BotStep(
+            job_id=job.id, bot_name=passo['bot_id'], status=passo['status'],
+            finished_at=datetime.now(timezone.utc) if passo['status'] != 'waiting_user' else None,
+            resultado=passo.get('resultado'), warning='; '.join(passo.get('warnings') or []) or None,
+            next_action=passo.get('next_action'), evidence_id=evidence_ids[0] if evidence_ids else None,
+        ))
+    db.commit()
+
+    lead.bot_job_id = job.id
+    lead.dossie_url = f'/api/bots/jobs/{job.id}/dossie'
+    db.commit()
+
+    return {'lead_id': lead.id, 'bot_job_id': job.id, 'dossie_url': lead.dossie_url, 'status': bots_resultado['status']}
+
+
+@app.post('/api/leads/{lead_id}/dismiss', dependencies=[Depends(verify_internal_token)])
+def lead_dismiss(lead_id: int, db: Session = Depends(get_db)):
+    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
+    lead.status = 'descartado'
+    db.commit()
+    return {'lead_id': lead.id, 'status': lead.status}
+
+
+@app.post('/api/leads/{lead_id}/mark-contacted', dependencies=[Depends(verify_internal_token)])
+def lead_mark_contacted(lead_id: int, db: Session = Depends(get_db)):
+    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
+    lead.status = 'contatado'
+    db.commit()
+    return {'lead_id': lead.id, 'status': lead.status}
 
 
 @app.get('/api/whatsapp/webhook')
