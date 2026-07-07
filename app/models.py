@@ -165,3 +165,52 @@ class StjOfficialFile(Base):
     row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default='pending')  # pending|downloaded|failed
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class Lead(Base):
+    """Um contato/cliente que chegou pelo WhatsApp — pode gerar várias
+    diligências (IntakeCase) ao longo do tempo."""
+
+    __tablename__ = 'leads'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    telefone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    nome: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cpf: Mapped[str | None] = mapped_column(String(20), nullable=True)  # sempre mascarado ao exibir, nunca em texto solto na tela
+    cnpj: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    origem: Mapped[str] = mapped_column(String(30), nullable=False, default='whatsapp_manual')
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default='novo')
+
+
+class WhatsAppMessage(Base):
+    """Mensagem (texto colado ou print) recebida de um Lead."""
+
+    __tablename__ = 'whatsapp_messages'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    lead_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    telefone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    texto_original: Mapped[str | None] = mapped_column(Text, nullable=True)
+    arquivo_evidencia: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class IntakeCase(Base):
+    """Um caso estruturado gerado a partir de uma ou mais mensagens —
+    vincula o Lead, os dados extraídos e o job de bots acionado."""
+
+    __tablename__ = 'intake_cases'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    lead_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    input_original: Mapped[str] = mapped_column(Text, nullable=False)
+    dados_extraidos: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    processos_detectados: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    divergencias: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    dados_faltantes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    resposta_sugerida: Mapped[str | None] = mapped_column(Text, nullable=True)
+    job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default='processado')
