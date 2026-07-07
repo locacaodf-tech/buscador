@@ -185,6 +185,17 @@ def test_9b_datajud_com_erro_de_rede_tambem_gera_mensagem_rica_nao_so_generica(m
 # ---------------------------------------------------------------------------
 
 def test_10_dossie_mostra_cnj_base_sufixo_tipo_documental(monkeypatch):
+    # Achado real: a dedup da v32.2 usa hash do texto — se outro arquivo de
+    # teste já processou o mesmo texto antes (mesmo banco compartilhado),
+    # esta chamada seria tratada como duplicata e não rodaria bots de novo.
+    # Limpa antes pra garantir isolamento deste teste específico.
+    from app.models import OpportunityLead
+    from app.db import SessionLocal
+    db_limpeza = SessionLocal()
+    db_limpeza.query(OpportunityLead).delete()
+    db_limpeza.commit()
+    db_limpeza.close()
+
     _mock_datajud_vazio(monkeypatch)
     client = TestClient(app)
     resp = client.post('/api/intake/whatsapp/manual', json={'texto': TEXTO_OFICIO_REQUISITORIO})
