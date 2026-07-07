@@ -2227,7 +2227,13 @@
   // ---------- Painel: Analisar processo por CNJ ----------
 
   function pareceCnjValido(raw) {
-    return digitsOnly(raw).length === 20;
+    // Espelha split_cnj_suffix do backend: um CNJ pode vir com sufixo de
+    // incidente/desdobramento tipo "/01" no final — isso não conta nos
+    // 20 dígitos do CNJ em si (achado real: essa validação em JS tinha o
+    // mesmo bug que já foi corrigido no backend, rejeitando um CNJ
+    // perfeitamente válido só porque vinha com "/01" no fim).
+    const semSufixo = raw.trim().replace(/\/\s*\d{1,3}\s*$/, '');
+    return digitsOnly(semSufixo).length === 20;
   }
 
   async function handleCnjAnalisar() {
