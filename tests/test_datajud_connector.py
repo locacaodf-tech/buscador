@@ -72,10 +72,11 @@ def test_search_com_cnj_estadual_infere_o_tj_certo(monkeypatch):
 
 
 def test_search_com_cnj_de_segmento_nao_coberto_cai_no_fallback(monkeypatch):
-    """Segmentos não cobertos pela inferência (ex.: 5 = Justiça do Trabalho)
+    """Segmentos não cobertos pela inferência (ex.: 6 = Justiça Eleitoral)
     não permitem inferir um tribunal único — aí sim mantém o fallback
-    antigo (consultar os 6 TRFs), mesmo sabendo que não é o ideal pra esse
-    caso específico; não é o escopo desta correção mudar isso."""
+    antigo (consultar os 6 TRFs). Trabalhista (segmento 5) passou a ser
+    coberto na v31 (TRT1-24) — ver test_datajud_trabalhista_agora_e_coberto
+    logo abaixo, que substitui o comportamento antigo testado aqui."""
     connector = DataJudConnector()
     chamadas = []
 
@@ -84,8 +85,25 @@ def test_search_com_cnj_de_segmento_nao_coberto_cai_no_fallback(monkeypatch):
         return []
 
     monkeypatch.setattr(connector, 'search_by_cnj', fake_search_by_cnj)
-    asyncio.run(connector.search('cnj', '0000000-00.2020.5.02.0001'))  # segmento 5 = trabalhista
+    asyncio.run(connector.search('cnj', '0000000-00.2020.6.02.0001'))  # segmento 6 = eleitoral, genuinamente não coberto
     assert len(chamadas[-1]) == 6
+
+
+def test_datajud_trabalhista_agora_e_coberto(monkeypatch):
+    """v31: Justiça do Trabalho (segmento 5) passou a ter tribunal inferido
+    (TRT1-24), então o DataJud agora consulta só o TRT certo, não os 6 TRFs
+    por fallback — mais preciso, achado necessário pro WhatsApp Intake
+    (exemplo do Fortaleza/CE precisa inferir TRT7 corretamente)."""
+    connector = DataJudConnector()
+    chamadas = []
+
+    async def fake_search_by_cnj(cnj, tribunals=None, max_results=50):
+        chamadas.append(tribunals)
+        return []
+
+    monkeypatch.setattr(connector, 'search_by_cnj', fake_search_by_cnj)
+    asyncio.run(connector.search('cnj', '0000765-97.2023.5.07.0016'))  # segmento 5, tribunal 07 = TRT7
+    assert chamadas[-1] == ['TRT7']
 
 
 def test_search_respeita_tribunal_explicito_mesmo_com_cnj_inferivel(monkeypatch):
