@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     # usa o Chromium baixado pelo próprio Playwright (playwright install chromium).
     # Aponte para um Chrome/Chromium já instalado no host se preferir não baixar outro.
     playwright_chrome_path: str = ''
+    # v31: token de verificação do webhook da Meta (WhatsApp Business Cloud
+    # API) — vazio por padrão, o que mantém o webhook desativado (decisão
+    # deliberada: não ativar WhatsApp Business agora).
+    whatsapp_verify_token: str = ''
 
 
 def parse_allowed_origins(raw: str) -> list[str]:
