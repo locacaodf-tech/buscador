@@ -291,3 +291,24 @@ class IntakeWhatsappManualRequest(BaseModel):
     texto: str
     telefone: str | None = None
     origem: str = 'whatsapp_manual'
+
+
+class PublicationImportItem(BaseModel):
+    """v33 — um item de publicação importada manualmente (colada ou de
+    arquivo), pra alimentar a esteira com dado real de qualquer tribunal."""
+    source: str = 'manual_import'
+    tribunal: str | None = None
+    publication_date: str | None = None
+    text: str
+    source_url: str | None = None
+
+
+class ImportPublicationsRequest(BaseModel):
+    """v33 — importação real de publicações (colar texto ou lista
+    estruturada) — não é fixture, processa o que a pessoa realmente trouxe."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    publications: list[PublicationImportItem] | None = None
+    texto_colado: str | None = None
+    tribunal: str | None = None
+    source: str = 'manual_import'
