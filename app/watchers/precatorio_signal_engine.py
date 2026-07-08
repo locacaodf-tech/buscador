@@ -80,6 +80,15 @@ def classificar_publicacao(texto: str) -> dict[str, Any]:
         if _remover_acentos(ente.lower()) in texto_norm:
             ente_devedor = ente
             break
+    if ente_devedor:
+        # v33: achado real — ENTES_DEVEDORES aqui tinha o MESMO bug já
+        # corrigido em whatsapp_intake.extrair_ente_devedor (devolvia só
+        # "Estado de", cortado, em vez de "Estado de Goiás" completo).
+        # Reaproveita a versão já corrigida, sem duplicar a lógica de novo.
+        from ..services.whatsapp_intake import extrair_ente_devedor
+        ente_completo = extrair_ente_devedor(texto)
+        if ente_completo:
+            ente_devedor = ente_completo
 
     natureza_alimentar = 'alimentar' in texto_norm
 
