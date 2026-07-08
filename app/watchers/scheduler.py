@@ -101,7 +101,8 @@ async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] |
             dedupe_key=dedupe_key, first_seen_at=agora, last_seen_at=agora, seen_count=1,
             source=hit.source, process_number=hit.process_number, normalized_cnj=hit.normalized_cnj,
             tribunal=hit.tribunal, debtor=(hit.raw or {}).get('ente_devedor'),
-            signal_type=hit.signal_type, confidence_score=score_info['score'], priority=score_info['prioridade'],
+            signal_type=hit.signal_type, estimated_opportunity_type=(hit.raw or {}).get('tipo_acao'),
+            confidence_score=score_info['score'], priority=score_info['prioridade'],
             next_action=_montar_proxima_acao(hit, score_info),
             publication_text=hit.publication_text, matched_terms=hit.matched_terms,
         )
@@ -159,10 +160,21 @@ async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] |
 
 
 def _montar_proxima_acao(hit, score_info) -> str:
+    ente_devedor = (hit.raw or {}).get('ente_devedor')
+    tipo_acao = (hit.raw or {}).get('tipo_acao')
+    contexto = ''
+    if ente_devedor:
+        contexto = f' Ação contra {ente_devedor}' + (f' ({tipo_acao})' if tipo_acao else '') + '.'
+
     if hit.signal_type in {'precatorio_confirmado', 'rpv_confirmada', 'oficio_requisitorio'}:
-        return f'Sinal forte de {hit.signal_type.replace("_", " ")} — rodar bots pra confirmar detalhes e gerar dossiê.'
+        return f'Sinal forte de {hit.signal_type.replace("_", " ")} — rodar bots pra confirmar detalhes e gerar dossiê.' + contexto
     if hit.signal_type in {'pre_rpv', 'pre_precatorio', 'calculo_homologado', 'transito_em_julgado', 'cumprimento_sentenca'}:
-        return f'Sinal de pré-oportunidade ({hit.signal_type.replace("_", " ")}) — acompanhar evolução, ainda não é precatório/RPV confirmado.'
+        return f'Sinal de pré-oportunidade ({hit.signal_type.replace("_", " ")}) — acompanhar evolução, ainda não é precatório/RPV confirmado.' + contexto
+    if hit.signal_type in {'credito_judicial_potencial', 'sentenca_favoravel', 'acordao_favoravel'}:
+        return (
+            f'Possível crédito judicial contra ente público{contexto} '
+            f'Ainda precisamos verificar fase processual, sentença, cálculos, trânsito em julgado e eventual RPV/precatório.'
+        )
     return 'Sinal fraco — revisar manualmente antes de investir tempo.'
 
 
