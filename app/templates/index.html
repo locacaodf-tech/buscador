@@ -592,6 +592,16 @@
     </div>
     <div id="watcherStatusArea" style="margin-top:14px;"></div>
 
+    <h2 class="simple-title" style="margin-top:26px;">Captação TJGO — importar publicações reais</h2>
+    <p class="simple-subtitle">O TJGO não tem mais Diário próprio desde maio/2025 — usa o DJEN nacional. O Comunica PJe (<a href="https://comunica.pje.jus.br/" target="_blank" rel="noopener">comunica.pje.jus.br</a>) é navegável por você sem login, mas o robots.txt dele não permite robô automatizado. Copie de lá e cole aqui.</p>
+    <label for="captacaoTexto">Cole a publicação (do Comunica PJe, print transcrito, ou qualquer texto)</label>
+    <textarea id="captacaoTexto" rows="5" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-family:inherit; font-size:15px;" placeholder="Ex.: Processo: 5419330-39.2022.8.09.0128 — Polo Passivo: Estado de Goiás — Tipo de ação: Horas Extras"></textarea>
+    <button class="simple-button" id="btnCaptacaoImportar" type="button" style="margin-top:12px;">Processar e criar leads</button>
+    <div class="btn-row" style="margin-top:10px;">
+      <a class="cert-copy-btn" style="text-decoration:none;" href="/api/leads/export.csv" target="_blank" rel="noopener">Exportar CSV de todos os leads</a>
+    </div>
+    <div id="captacaoResultadoArea" style="margin-top:14px;"></div>
+
     <h2 class="simple-title" style="margin-top:26px;">Leads encontrados</h2>
     <div id="leadsListaArea"></div>
   </section>
@@ -1887,6 +1897,27 @@
       el('leadsListaArea').innerHTML = simpleMessage('Não consegui carregar os leads: ' + e.message, 'error');
     }
   }
+
+  el('btnCaptacaoImportar').addEventListener('click', async () => {
+    const texto = el('captacaoTexto').value.trim();
+    if (!texto) {
+      el('captacaoResultadoArea').innerHTML = simpleMessage('Cole o texto da publicação antes de processar.', 'info');
+      return;
+    }
+    el('captacaoResultadoArea').innerHTML = simpleLoading('Processando...');
+    try {
+      const data = await apiFetch('/api/watchers/import-publications', { method: 'POST', headers: buildHeaders(true), body: JSON.stringify({ texto_colado: texto, tribunal: 'TJGO', source: 'manual_tjgo' }) });
+      let html = '<div class="dados-faltantes-box" style="background:var(--success-bg); border-color:#bfe3cd;">';
+      html += `✅ ${data.total_publications} publicação(ões) lida(s), ${data.total_matches} com sinal, ${data.total_leads_created} lead(s) novo(s) criado(s)`;
+      if (data.duplicados_ignorados) html += `, ${data.duplicados_ignorados} duplicado(s) ignorado(s)`;
+      html += '.</div>';
+      el('captacaoResultadoArea').innerHTML = html;
+      el('captacaoTexto').value = '';
+      carregarLeads();
+    } catch (e) {
+      el('captacaoResultadoArea').innerHTML = simpleMessage('Não consegui processar: ' + e.message, 'error');
+    }
+  });
 
   el('btnRodarWatchers').addEventListener('click', async () => {
     el('watcherStatusArea').innerHTML = simpleLoading('Rodando robôs...');
