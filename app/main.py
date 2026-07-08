@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import hmac
+import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 from .auth import SESSION_COOKIE_NAME, create_session_token, verify_session_token
 from .config import get_settings, parse_allowed_origins
 from .db import get_db, init_db
-from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest, BotsRunRequest, BotsResumeRequest, IntakeWhatsappManualRequest
+from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest, BotsRunRequest, BotsResumeRequest, IntakeWhatsappManualRequest, ImportPublicationsRequest
 from .services import stj_uploads
 from .services import certificate_center
 from .services import source_master
@@ -942,6 +943,31 @@ def leads_list(status: str | None = None, priority: str | None = None, limit: in
     } for l in leads]
 
 
+@app.get('/api/leads/export.csv', response_class=PlainTextResponse, dependencies=[Depends(verify_internal_token)])
+def leads_export_csv(db: Session = Depends(get_db)):
+    """v33 — exporta os leads em CSV: data, fonte, tribunal, CNJ, ente
+    devedor, tipo de ação, sinal, prioridade, score, trecho, próxima ação,
+    dossiê. Precisa vir ANTES de /api/leads/{lead_id} no registro de
+    rotas, senão o FastAPI tenta casar 'export.csv' como se fosse um
+    lead_id inteiro (achado real testando)."""
+    import csv
+    import io as io_module
+    from .services.whatsapp_intake import mascarar_documentos_no_texto
+    leads = db.query(OpportunityLead).order_by(OpportunityLead.confidence_score.desc()).all()
+    buf = io_module.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(['data', 'fonte', 'tribunal', 'cnj', 'ente_devedor', 'tipo_de_acao', 'sinal', 'prioridade', 'score', 'trecho_publicacao', 'proxima_acao', 'link_dossie'])
+    for l in leads:
+        trecho_mascarado = mascarar_documentos_no_texto((l.publication_text or '')[:200])
+        writer.writerow([
+            l.created_at.isoformat() if l.created_at else '', l.source or '', l.tribunal or '',
+            l.normalized_cnj or '', l.debtor or '', l.estimated_opportunity_type or '', l.signal_type or '',
+            l.priority or '', l.confidence_score, trecho_mascarado, l.next_action or '',
+            f'/api/leads/{l.id}/dossie',
+        ])
+    return buf.getvalue()
+
+
 @app.get('/api/leads/{lead_id}', dependencies=[Depends(verify_internal_token)])
 def lead_detail(lead_id: int, db: Session = Depends(get_db)):
     lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
@@ -1031,6 +1057,49 @@ def lead_dossie(lead_id: int, request: Request, db: Session = Depends(get_db)):
         'prioridade_label': prioridade_labels.get(lead.priority, lead.priority),
         'publication_text_mascarado': texto_mascarado,
     })
+
+
+@app.post('/api/watchers/import-publications', dependencies=[Depends(verify_internal_token)])
+async def watchers_import_publications(request: ImportPublicationsRequest, db: Session = Depends(get_db)):
+    """v33 — importação REAL de publicações (não fixture). Aceita tanto
+    uma lista estruturada quanto um texto colado solto (ex.: copiado
+    direto do Comunica PJe, já que aquele site é navegável por humano
+    mas o robots.txt dele desautoriza acesso automatizado — ver
+    RELATORIO_V33 para a investigação completa). Usa a MESMA esteira do
+    Publication Watcher: publicação → sinal → lead → bots → dossiê."""
+    publicacoes: list[dict] = []
+    if request.publications:
+        for item in request.publications:
+            publicacoes.append({
+                'texto': item.text, 'tribunal': item.tribunal or request.tribunal,
+                'data': item.publication_date, 'url': item.source_url,
+            })
+    elif request.texto_colado:
+        # Um bloco colado pode ter uma ou várias publicações separadas por
+        # linha em branco dupla — divide por esse padrão; se não achar,
+        # trata o bloco inteiro como uma publicação só.
+        blocos = [b.strip() for b in re.split(r'\n\s*\n\s*\n|\n-{3,}\n', request.texto_colado) if b.strip()]
+        if not blocos:
+            blocos = [request.texto_colado.strip()]
+        for bloco in blocos:
+            publicacoes.append({'texto': bloco, 'tribunal': request.tribunal, 'data': None})
+    else:
+        raise HTTPException(status_code=400, detail='Informe "publications" (lista) ou "texto_colado".')
+
+    from .watchers.scheduler import rodar_watcher
+    fonte = request.source or 'manual_import'
+    resultado = await rodar_watcher(db, 'publication_watcher', publicacoes_fixture=publicacoes, cnjs_conhecidos=None)
+    # Corrige a fonte dos hits/leads criados nesta chamada pra refletir a
+    # origem real informada (ex.: 'manual_tjgo'), não o genérico
+    # 'fixture_local' usado internamente pelo processar_publicacoes.
+    if fonte != 'fixture_local':
+        db.query(PublicationHit).filter(PublicationHit.watcher_run_id == resultado['watcher_run_id']).update({'source': fonte})
+        recentes = db.query(OpportunityLead).filter(OpportunityLead.source == 'fixture_local').order_by(OpportunityLead.id.desc()).limit(len(publicacoes)).all()
+        for lead in recentes:
+            lead.source = fonte
+        db.commit()
+
+    return {'total_publicacoes_recebidas': len(publicacoes), **resultado}
 
 
 @app.get('/api/whatsapp/webhook')
