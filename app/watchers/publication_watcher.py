@@ -52,12 +52,27 @@ def processar_publicacoes(publicacoes: list[dict[str, Any]], source: str = 'fixt
             if len(n) == 20:
                 cnj_normalizado = format_cnj(n)
                 tribunal = tribunal or infer_tribunal_from_cnj(n)
+        else:
+            # v33: achado real — texto colado (não estruturado) nunca
+            # tinha numero_processo separado, então o CNJ nunca era
+            # extraído mesmo estando claramente escrito no texto. Reusa
+            # o mesmo extrator do IntakeBot, já testado.
+            from ..services.whatsapp_intake import extrair_cnj_candidatos
+            candidatos = extrair_cnj_candidatos(texto)
+            if candidatos:
+                n = candidatos[0]['cnj']
+                cnj_normalizado = format_cnj(n)
+                numero = cnj_normalizado
+                tribunal = tribunal or infer_tribunal_from_cnj(n)
 
         if tribunal:
             tribunais_vistos.add(tribunal)
 
         if classificacao['signal_type'] in {'descartar'}:
             continue  # publicação genérica demais, nem vira hit
+
+        from ..services.whatsapp_intake import extrair_tipo_acao
+        tipo_acao = extrair_tipo_acao(texto)
 
         hits.append(HitEncontrado(
             source=source, tribunal=tribunal, publication_date=pub.get('data'),
@@ -66,7 +81,7 @@ def processar_publicacoes(publicacoes: list[dict[str, Any]], source: str = 'fixt
             publication_text=texto, matched_terms=classificacao['termos_batidos'],
             signal_type=classificacao['signal_type'], confidence='medium' if cnj_normalizado else 'low',
             source_url=pub.get('url'),
-            raw={'ente_devedor': classificacao['ente_devedor'], 'natureza_alimentar': classificacao['natureza_alimentar']},
+            raw={'ente_devedor': classificacao['ente_devedor'], 'natureza_alimentar': classificacao['natureza_alimentar'], 'tipo_acao': tipo_acao},
         ))
 
     return WatcherResult(
