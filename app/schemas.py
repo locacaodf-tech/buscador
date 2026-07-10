@@ -8,7 +8,7 @@ from .services.identifier import infer_identifier, normalize_search_type
 from .utils.cpf import only_digits
 from .utils.cnj import normalize_cnj
 
-SearchProvider = Literal['auto', 'multi', 'datajud', 'judit', 'tribunal_precatorios', 'cjf_trf_precatorios', 'stj_precatorios', 'mpo_siop_precatorios']
+SearchProvider = Literal['auto', 'multi', 'datajud', 'tribunal_precatorios', 'cjf_trf_precatorios', 'stj_precatorios', 'mpo_siop_precatorios']
 SearchType = Literal[
     'auto',
     'cnj',
