@@ -12,20 +12,20 @@ def _orchestrator():
 
 def test_provider_explicito_ignora_o_tipo_de_busca():
     orch = _orchestrator()
-    assert orch._providers_to_try('judit', 'cpf') == ['judit']
+    assert orch._providers_to_try('cjf_trf_precatorios', 'cpf') == ['cjf_trf_precatorios']
     assert orch._providers_to_try('datajud', 'unknown') == ['datajud']
 
 
-def test_auto_com_cpf_cnpj_name_oab_tenta_judit_e_tribunal_precatorios():
+def test_auto_com_cpf_cnpj_name_oab_tenta_tribunal_precatorios():
     orch = _orchestrator()
     for tipo in ['cpf', 'cnpj', 'name', 'oab']:
-        assert orch._providers_to_try('auto', tipo) == ['judit', 'tribunal_precatorios']
+        assert orch._providers_to_try('auto', tipo) == ['tribunal_precatorios']
 
 
 def test_multi_com_cpf_inclui_cjf_trf1_e_datajud_tambem():
     orch = _orchestrator()
     resultado = orch._providers_to_try('multi', 'cpf')
-    assert resultado == ['judit', 'tribunal_precatorios', 'cjf_trf_precatorios', 'datajud']
+    assert resultado == ['tribunal_precatorios', 'cjf_trf_precatorios', 'datajud']
 
 
 def test_auto_com_cnj_so_tenta_datajud():
@@ -34,10 +34,10 @@ def test_auto_com_cnj_so_tenta_datajud():
     assert orch._providers_to_try('auto', 'numero_processo') == ['datajud']
 
 
-def test_multi_com_cnj_inclui_judit_e_cjf_trf1():
+def test_multi_com_cnj_inclui_cjf_trf1():
     orch = _orchestrator()
     resultado = orch._providers_to_try('multi', 'cnj')
-    assert resultado == ['datajud', 'judit', 'cjf_trf_precatorios']
+    assert resultado == ['datajud', 'cjf_trf_precatorios']
 
 
 def test_auto_com_sequencial_precatorio_nao_inclui_stj():
@@ -46,7 +46,7 @@ def test_auto_com_sequencial_precatorio_nao_inclui_stj():
     orch = _orchestrator()
     resultado = orch._providers_to_try('auto', 'precatorio_number')
     assert 'stj_precatorios' not in resultado
-    assert resultado == ['tribunal_precatorios', 'judit']
+    assert resultado == ['tribunal_precatorios']
 
 
 def test_multi_com_sequencial_precatorio_inclui_stj():
@@ -64,7 +64,7 @@ def test_entidade_devedora_so_vai_pro_mpo_siop():
 def test_tipo_desconhecido_cai_no_fallback_generico():
     orch = _orchestrator()
     resultado = orch._providers_to_try('auto', 'algum_tipo_que_nao_existe')
-    assert resultado == ['datajud', 'judit', 'tribunal_precatorios']
+    assert resultado == ['datajud', 'tribunal_precatorios']
 
 
 def test_connector_invalido_levanta_erro_claro():
