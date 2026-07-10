@@ -24,18 +24,15 @@ class Settings(BaseSettings):
     datajud_timeout_seconds: int = 40
     datajud_page_size: int = 50
 
-    judit_enabled: bool = False
-    judit_api_key: str = ''
-    judit_requests_base_url: str = 'https://requests.production.judit.io'
-    judit_tracking_base_url: str = 'https://tracking.production.judit.io'
-    judit_lawsuits_base_url: str = 'https://lawsuits.production.judit.io'
-    judit_crawler_base_url: str = 'https://crawler.production.judit.io'
-    judit_timeout_seconds: int = 60
-    judit_poll_seconds: int = 5
-    judit_max_polls: int = 20
-    # Valor de search_type enviado à Judit para busca por nome. A doc disponível
-    # não deixa 100% claro se é "name" ou "nome" — configurável sem mexer em código.
-    judit_name_search_type: str = 'name'
+    whatsapp_verify_token: str = ''
+    # v32.1: se true, leads de alta prioridade acionam bots automaticamente
+    # quando o watcher roda. Default false — não sobrecarregar sem pedir.
+    watchers_auto_run_bots: bool = False
+    # Salt pro hash de CPF/CNPJ do credor no índice processual — permite
+    # buscar por documento sem guardar o número em claro. Tem um valor
+    # padrão de desenvolvimento; em produção PRECISA ser sobrescrito
+    # (o health-check avisa se continuar no padrão).
+    indice_cpf_hash_salt: str = 'buscador-processos-indice-nacional-salt-dev-only'
 
     internal_api_token: str = ''
     # Senha simples para proteger a tela (login por sessão via cookie).
@@ -64,13 +61,6 @@ class Settings(BaseSettings):
     # usa o Chromium baixado pelo próprio Playwright (playwright install chromium).
     # Aponte para um Chrome/Chromium já instalado no host se preferir não baixar outro.
     playwright_chrome_path: str = ''
-    # v31: token de verificação do webhook da Meta (WhatsApp Business Cloud
-    # API) — vazio por padrão, o que mantém o webhook desativado (decisão
-    # deliberada: não ativar WhatsApp Business agora).
-    whatsapp_verify_token: str = ''
-    # v32.1: se true, leads de alta prioridade acionam bots automaticamente
-    # quando o watcher roda. Default false — não sobrecarregar sem pedir.
-    watchers_auto_run_bots: bool = False
 
 
 def parse_allowed_origins(raw: str) -> list[str]:
