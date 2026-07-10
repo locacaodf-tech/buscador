@@ -211,7 +211,7 @@ def test_valores_ficticios_do_incidente_nunca_aparecem_em_resultado_real(monkeyp
 
 
 # ---------------------------------------------------------------------------
-# Busca por nome do credor — feature real, sem depender de Judit/provedor
+# Busca por nome do credor — feature real, sem depender de provedor comercial
 # pago: se a planilha do STJ tiver coluna de credor/beneficiário, dá pra
 # achar o precatório pelo nome, gratuitamente, nos dados que o próprio
 # usuário já carregou.
