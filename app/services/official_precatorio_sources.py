@@ -522,7 +522,7 @@ def build_precatorio_route_plan(search_type: str, search_key: str, extra_params:
         {
             'layer': 'descoberta_processual',
             'goal': 'Encontrar processos relacionados ao identificador informado.',
-            'sources': ['datajud', 'judit/escavador/jusbrasil se houver token', 'MNI/PJe/eproc se houver credencial'],
+            'sources': ['datajud', 'escavador/jusbrasil se houver token', 'MNI/PJe/eproc se houver credencial'],
             'expected_output': ['numero_processo', 'classe', 'assunto', 'partes', 'movimentacoes', 'indicio_precatorio_rpv'],
         },
         {
