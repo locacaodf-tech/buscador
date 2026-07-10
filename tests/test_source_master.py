@@ -17,17 +17,16 @@ client = TestClient(app)
 
 def test_registry_externo_tem_fontes_esperadas():
     esperadas = {
-        'datajud_cnj', 'judit_api', 'comunica_pje_djen', 'mni_pje', 'sispreq_pdpj',
+        'datajud_cnj', 'comunica_pje_djen', 'mni_pje', 'sispreq_pdpj',
         'codex_cnj', 'bnmp', 'antecedentes_criminais_pf_sinic',
         'escavador_api', 'jusbrasil_api', 'infosimples_apis',
     }
     assert esperadas == set(EXTERNAL_SOURCE_REGISTRY)
 
 
-def test_datajud_e_judit_marcados_como_implementados():
+def test_datajud_marcado_como_implementado():
     sources = external_sources()
     assert sources['datajud_cnj']['integration_status'] == 'implemented'
-    assert sources['judit_api']['integration_status'] == 'implemented'
 
 
 def test_comunica_pje_marcado_como_institucional_nao_publico():
@@ -55,9 +54,9 @@ def test_summary_agrega_os_tres_registries():
     summary = master_sources_summary()
     assert summary['total_precatorio_oficial'] == 66
     assert summary['total_certidoes'] == 34  # 26 TJs estaduais + TJDFT + 7 fontes fixas (Serpro/Regularize/CJF/STF/STJ/TST/TRT-base)
-    assert summary['total_externo_comercial'] == 11
-    assert summary['total_sources'] == 66 + 34 + 11  # achado da auditoria: faltava esse total consolidado
-    assert any('datajud_cnj' in e['source'] or 'judit_api' in e['source'] for e in summary['prontos_para_uso_agora'])
+    assert summary['total_externo_comercial'] == 10  # judit_api removido a pedido do usuário
+    assert summary['total_sources'] == 66 + 34 + 10
+    assert any('datajud_cnj' in e['source'] for e in summary['prontos_para_uso_agora'])
 
 
 def test_summary_lista_o_que_precisa_de_credencial():
