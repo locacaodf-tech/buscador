@@ -31,11 +31,6 @@ def _etapa(nome: str, status: str, detalhe: str = '') -> dict[str, str]:
     return {'nome': nome, 'status': status, 'detalhe': detalhe}
 
 
-def _judit_configurada() -> bool:
-    settings = get_settings()
-    return bool(settings.judit_enabled and settings.judit_api_key)
-
-
 async def _consultar_cnj(valor: str, tribunal_hint: str | None) -> dict[str, Any]:
     from ..utils.cnj import infer_tribunal_from_cnj, format_cnj
     from datetime import datetime, timezone
@@ -197,11 +192,6 @@ def _consultar_pessoa(tipo: str, valor: str) -> dict[str, Any]:
     fontes_manuais = []
     rotulo = {'cpf': 'CPF', 'cnpj': 'CNPJ', 'oab': 'OAB'}.get(tipo, tipo.upper())
 
-    if _judit_configurada():
-        etapas.append(_etapa('Provider comercial (Judit)', 'concluido', 'Configurada — busca nacional disponível via /api/search.'))
-        proxima_acao = f'Judit está configurada. Use a busca avançada (provider=judit) pra consultar {rotulo} nacionalmente.'
-        return {'etapas': etapas, 'pendencias': pendencias, 'fontes_manuais': fontes_manuais, 'proxima_acao': proxima_acao}
-
     etapas.append(_etapa('Provider comercial', 'nao_configurado', 'Nenhum provider comercial configurado.'))
     pendencias.append(f'Busca nacional por {rotulo} depende de provider comercial ou base própria ainda não configurada.')
     fontes_manuais.append({'fonte': 'Consulta manual em provedor externo (opcional)', 'acao': 'Registrar resultado manual depois de consultar por fora'})
@@ -287,7 +277,7 @@ async def run_diligencia(
         fontes_manuais += parte['fontes_manuais']
         proxima_acao = parte['proxima_acao']
         raw_avancado['stj'] = parte['raw']
-        if not resultados_confirmados and _judit_configurada() is False:
+        if not resultados_confirmados:
             pendencias.append('Busca nacional por nome (fora do STJ) depende de provider comercial ainda não configurado.')
 
     elif tipo in {'cpf', 'cnpj', 'oab'}:
