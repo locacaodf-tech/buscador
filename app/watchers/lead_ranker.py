@@ -24,7 +24,7 @@ PONTOS_NEGATIVOS = {
 }
 
 SIGNAL_TYPES_ALTA_PRIORIDADE = {'precatorio_confirmado', 'rpv_confirmada', 'oficio_requisitorio'}
-SIGNAL_TYPES_MEDIA_PRIORIDADE = {'pre_rpv', 'pre_precatorio', 'calculo_homologado', 'transito_em_julgado', 'cumprimento_sentenca', 'sentenca_favoravel', 'acordao_favoravel', 'credito_judicial_potencial'}
+SIGNAL_TYPES_MEDIA_PRIORIDADE = {'pre_rpv', 'pre_precatorio', 'calculo_homologado', 'transito_em_julgado', 'cumprimento_sentenca', 'sentenca_favoravel', 'acordao_favoravel', 'credito_judicial_potencial', 'sentenca_proferida'}
 
 
 def calcular_score(*, signal_type: str | None, cnj: str | None, tribunal: str | None,
