@@ -29,7 +29,7 @@ class ExternalSource:
 
 
 # Pesquisado ao vivo em 01-02/07/2026. Fontes já implementadas como conectores
-# reais (datajud, judit) apontam para isso explicitamente — não duplicam lógica,
+# reais (datajud) apontam para isso explicitamente — não duplicam lógica,
 # só documentam no mesmo lugar que o resto.
 EXTERNAL_SOURCE_REGISTRY: dict[str, ExternalSource] = {
     'datajud_cnj': ExternalSource(
@@ -41,17 +41,6 @@ EXTERNAL_SOURCE_REGISTRY: dict[str, ExternalSource] = {
         accepted_inputs=('cnj', 'numero_processo'),
         integration_status='implemented',
         notes='Já implementado (app/connectors/datajud.py). Metadados processuais públicos de todo o Brasil; não resolve CPF/nome nem precatório/LOA oficial.',
-    ),
-    'judit_api': ExternalSource(
-        source_id='judit_api',
-        name='Judit API',
-        category='api_privada_comercial',
-        scope='nacional_processual',
-        url_documentacao='https://produto.judit.io/api',
-        accepted_inputs=('cpf', 'cnpj', 'oab', 'name', 'cnj'),
-        requires_contract=True,
-        integration_status='implemented',
-        notes='Já implementado (app/connectors/judit.py). Funciona quando JUDIT_ENABLED=true + JUDIT_API_KEY configurados.',
     ),
     'comunica_pje_djen': ExternalSource(
         source_id='comunica_pje_djen',
@@ -135,7 +124,7 @@ EXTERNAL_SOURCE_REGISTRY: dict[str, ExternalSource] = {
         url_documentacao='https://api.escavador.com/',
         requires_contract=True,
         integration_status='not_researched',
-        notes='Alternativa comercial à Judit, mencionada no escopo. Capacidades não verificadas nesta rodada — não presumir campos aceitos sem checar a documentação real. Se você contratar, entra no mesmo padrão de conector configurável que Judit/Serpro.',
+        notes='Alternativa comercial de busca nacional por pessoa, mencionada no escopo. Capacidades não verificadas nesta rodada — não presumir campos aceitos sem checar a documentação real.',
     ),
     'jusbrasil_api': ExternalSource(
         source_id='jusbrasil_api',
