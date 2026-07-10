@@ -97,10 +97,15 @@ async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] |
             termos_negativos=[t for t in (hit.matched_terms or []) if t in {'embargos', 'agravo', 'recurso', 'rescisória', 'rescisoria'}],
         )
 
+        from ..utils.cpf import mask_document, hash_document
+        credor_doc = (hit.raw or {}).get('credor_cpf') or (hit.raw or {}).get('credor_cnpj')
         lead = OpportunityLead(
             dedupe_key=dedupe_key, first_seen_at=agora, last_seen_at=agora, seen_count=1,
             source=hit.source, process_number=hit.process_number, normalized_cnj=hit.normalized_cnj,
             tribunal=hit.tribunal, debtor=(hit.raw or {}).get('ente_devedor'),
+            creditor_name=(hit.raw or {}).get('credor_nome'),
+            creditor_document_masked=mask_document(credor_doc) if credor_doc else None,
+            creditor_document_hash=hash_document(credor_doc) if credor_doc else None,
             signal_type=hit.signal_type, estimated_opportunity_type=(hit.raw or {}).get('tipo_acao'),
             confidence_score=score_info['score'], priority=score_info['prioridade'],
             next_action=_montar_proxima_acao(hit, score_info),
@@ -170,7 +175,7 @@ def _montar_proxima_acao(hit, score_info) -> str:
         return f'Sinal forte de {hit.signal_type.replace("_", " ")} — rodar bots pra confirmar detalhes e gerar dossiê.' + contexto
     if hit.signal_type in {'pre_rpv', 'pre_precatorio', 'calculo_homologado', 'transito_em_julgado', 'cumprimento_sentenca'}:
         return f'Sinal de pré-oportunidade ({hit.signal_type.replace("_", " ")}) — acompanhar evolução, ainda não é precatório/RPV confirmado.' + contexto
-    if hit.signal_type in {'credito_judicial_potencial', 'sentenca_favoravel', 'acordao_favoravel'}:
+    if hit.signal_type in {'credito_judicial_potencial', 'sentenca_favoravel', 'acordao_favoravel', 'sentenca_proferida'}:
         return (
             f'Possível crédito judicial contra ente público{contexto} '
             f'Ainda precisamos verificar fase processual, sentença, cálculos, trânsito em julgado e eventual RPV/precatório.'
