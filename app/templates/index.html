@@ -725,7 +725,6 @@
         <select id="provider">
           <option value="auto">Automático</option>
           <option value="datajud">DataJud/CNJ</option>
-          <option value="judit">Judit</option>
           <option value="cjf_trf_precatorios">CJF/TRF Precatórios</option>
         </select>
       </div>
@@ -1085,7 +1084,7 @@
   }
 
   function demoIndicioResponse(provider, type, searchKey, tribunal) {
-    const providerUsed = (provider && provider !== 'auto') ? provider : ((type === 'cnj' || type === 'numero_processo') ? 'datajud' : 'judit');
+    const providerUsed = (provider && provider !== 'auto') ? provider : 'datajud';
     const seed = seedFromText(searchKey);
     const numeroProcesso = demoNumeroProcesso(searchKey);
     return {
@@ -1182,16 +1181,6 @@
             precatorio_scan: { description: 'Varredura por indícios de precatório/RPV.' },
           },
         },
-        judit: {
-          supported_search_types: ['cpf', 'cnpj', 'oab', 'cnj', 'name'],
-          capabilities: {
-            cpf: { description: 'Busca processual por CPF via Judit.' },
-            cnpj: { description: 'Busca processual por CNPJ via Judit.' },
-            oab: { description: 'Busca por OAB via Judit.' },
-            cnj: { description: 'Busca por número CNJ via Judit.' },
-            name: { description: 'Busca por nome da parte via Judit.' },
-          },
-        },
         tribunal_precatorios: {
           supported_search_types: ['requisitorio_number', 'precatorio_number', 'rpv_number', 'cpf'],
           capabilities: {
@@ -1272,9 +1261,9 @@
     const iso = (msAgo) => new Date(now - msAgo).toISOString();
     return [
       { id: 4, created_at: iso(20 * 60 * 1000), provider: 'datajud', search_type: 'cnj', search_key_masked: '000***400', tribunals: '["TRF1"]', status: 'completed', notes: null },
-      { id: 3, created_at: iso(3 * 3600 * 1000), provider: 'judit', search_type: 'cpf', search_key_masked: '123.***.***-00', tribunals: '[]', status: 'completed', notes: 'judit: Judit não está habilitada. Configure JUDIT_ENABLED=true e JUDIT_API_KEY.' },
+      { id: 3, created_at: iso(3 * 3600 * 1000), provider: 'cjf_trf_precatorios', search_type: 'cpf', search_key_masked: '123.***.***-00', tribunals: '[]', status: 'completed', notes: null },
       { id: 2, created_at: iso(26 * 3600 * 1000), provider: 'datajud', search_type: 'precatorio_scan', tribunals: '["TRF1","TRF2"]', search_key_masked: 'precatorio_scan', status: 'completed', notes: null },
-      { id: 1, created_at: iso(72 * 3600 * 1000), provider: 'judit', search_type: 'name', search_key_masked: 'Ful***Tal', tribunals: '[]', status: 'completed', notes: null },
+      { id: 1, created_at: iso(72 * 3600 * 1000), provider: 'datajud', search_type: 'cnj', search_key_masked: '003***400', tribunals: '[]', status: 'completed', notes: null },
     ];
   }
 
@@ -2096,7 +2085,6 @@
       const d = await apiFetch('/api/diagnostico', { method: 'GET', headers: buildHeaders(false) });
       let html = '';
       html += diagnosticoLinha('DataJud (consulta por CNJ)', true, d.datajud.chave);
-      html += diagnosticoLinha('Judit (busca por CPF/CNPJ/nome/OAB)', d.judit.ativo, d.judit.ativo ? 'Ativa' : (d.judit.proxima_acao || 'Não configurada'));
       html += diagnosticoLinha('Arquivo do STJ carregado', d.stj.arquivo_carregado, d.stj.arquivo_carregado ? d.stj.quantidade_arquivos + ' arquivo(s)' : 'Nenhum ainda');
       html += diagnosticoLinha('Serpro CND (certidão fiscal automática)', d.serpro_cnd.ativo, d.serpro_cnd.ativo ? 'Ativa' : 'Não configurada — emissão manual disponível');
       html += diagnosticoLinha('Login', d.login.ativo, d.login.ativo ? ('Ativo, sessão dura ' + d.login.sessao_dura_dias + ' dias') : 'Desativado');
@@ -2790,7 +2778,6 @@
           { source: 'precatorio_oficial:stj_precatorios', name: 'STJ' },
           { source: 'certidao:serpro_consulta_cnd', name: 'Serpro CND' },
           { source: 'externo_comercial:datajud_cnj', name: 'DataJud/CNJ' },
-          { source: 'externo_comercial:judit_api', name: 'Judit' },
         ],
         dependem_de_credencial_ou_contrato: [
           { source: 'precatorio_oficial:sispreq_pdpj', name: 'SisPreq/PDPJ' },
