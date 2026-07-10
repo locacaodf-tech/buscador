@@ -9,7 +9,6 @@ from .normalizer import normalize_process_record
 from ..connectors.base import ProviderNotConfigured, SearchNotSupported
 from ..connectors.cjf_trf_precatorios import CjfTrfPrecatoriosConnector
 from ..connectors.datajud import DataJudConnector
-from ..connectors.judit import JuditConnector
 from ..connectors.mpo_siop_precatorios import MpoSiopPrecatoriosConnector
 from ..connectors.stj_precatorios import StjPrecatoriosConnector
 from ..connectors.tribunal_precatorios import TribunalPrecatoriosConnector
@@ -20,7 +19,6 @@ from ..utils.cpf import mask_document
 
 CONNECTOR_CLASSES = {
     'datajud': DataJudConnector,
-    'judit': JuditConnector,
     'tribunal_precatorios': TribunalPrecatoriosConnector,
     'cjf_trf_precatorios': CjfTrfPrecatoriosConnector,
     'stj_precatorios': StjPrecatoriosConnector,
@@ -120,16 +118,15 @@ class ProcessLookupOrchestrator:
             return [requested]
 
         if search_type in {'cpf', 'cnpj', 'name', 'oab'}:
-            # Primeiro provedor privado. Depois conectores oficiais de precatórios.
             # cjf_trf_precatorios ainda é experimental (ver docstring do conector),
             # por isso só entra no modo multi, não no auto por padrão.
             if requested == 'auto':
-                return ['judit', 'tribunal_precatorios']
-            return ['judit', 'tribunal_precatorios', 'cjf_trf_precatorios', 'datajud']
+                return ['tribunal_precatorios']
+            return ['tribunal_precatorios', 'cjf_trf_precatorios', 'datajud']
 
         if search_type in {'cnj', 'numero_processo', 'precatorio_scan'}:
             if requested == 'multi':
-                return ['datajud', 'judit', 'cjf_trf_precatorios']
+                return ['datajud', 'cjf_trf_precatorios']
             return ['datajud']
 
         if search_type in {'requisitorio_number', 'precatorio_number', 'rpv_number', 'unknown'}:
@@ -137,14 +134,14 @@ class ProcessLookupOrchestrator:
             # stj_precatorios só entra no multi (sequencial é numeração interna de cada órgão;
             # no auto, sem saber o órgão emissor, buscar sequencial no STJ geraria falso match).
             if requested == 'multi':
-                return ['tribunal_precatorios', 'cjf_trf_precatorios', 'stj_precatorios', 'judit', 'datajud']
-            return ['tribunal_precatorios', 'judit']
+                return ['tribunal_precatorios', 'cjf_trf_precatorios', 'stj_precatorios', 'datajud']
+            return ['tribunal_precatorios']
 
         if search_type == 'entidade_devedora':
             # Só o MPO/SIOP entende esse tipo de busca (confirmação orçamentária/LOA por entidade).
             return ['mpo_siop_precatorios']
 
-        return ['datajud', 'judit', 'tribunal_precatorios']
+        return ['datajud', 'tribunal_precatorios']
 
     def _connector(self, provider: str):
         cls = CONNECTOR_CLASSES.get(provider)
