@@ -103,7 +103,7 @@ class CjfTrfPrecatoriosConnector(BaseConnector):
     formulário. A URL e o fluxo de consulta por processo/CNJ foram
     confirmados ao vivo (a ferramenta de pesquisa fez a requisição de
     verdade e trouxe um resultado real). Mas esta implementação NÃO foi
-    testada ponta a ponta como os conectores DataJud/Judit foram. A extração
+    testada ponta a ponta como o conector DataJud foi. A extração
     de campos estruturados (classe, status do requisitório, ano-orçamento)
     ainda é best-effort — devolve o texto da página, não campos garantidamente
     corretos. Valide com um caso real antes de confiar no resultado.
@@ -161,7 +161,7 @@ class CjfTrfPrecatoriosConnector(BaseConnector):
     def __init__(self):
         # Sem credencial fixa de conector: cada fonte declara se exige uma
         # (ver FEDERAL_SOURCES). Nada para validar aqui, ao contrário de
-        # Judit/DataJud que exigem API key configurada.
+        # DataJud, que exige API key configurada.
         pass
 
     def _target_tribunal(self, tribunals: list[str] | None) -> str:
