@@ -282,6 +282,7 @@ class OpportunityLead(Base):
     debtor: Mapped[str | None] = mapped_column(String(255), nullable=True)
     creditor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     creditor_document_masked: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    creditor_document_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     lawyer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signal_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     phase: Mapped[str | None] = mapped_column(String(50), nullable=True)
