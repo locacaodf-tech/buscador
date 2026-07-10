@@ -29,3 +29,16 @@ def is_valid_cpf_basic(value: str) -> bool:
         return '0' if r == 10 else str(r)
 
     return digits[-2] == calc_digit(digits[:9]) and digits[-1] == calc_digit(digits[:10])
+
+
+def hash_document(value: str | None) -> str | None:
+    """Hash salgado de CPF/CNPJ — pra buscar por documento sem guardar o
+    número em claro em nenhum lugar. Usa o salt configurado em
+    INDICE_CPF_HASH_SALT (ver app/config.py); nunca reversível."""
+    import hashlib
+    from ..config import get_settings
+    digitos = only_digits(value)
+    if not digitos:
+        return None
+    salt = get_settings().indice_cpf_hash_salt
+    return hashlib.sha256((salt + digitos).encode('utf-8')).hexdigest()
