@@ -98,7 +98,6 @@ def test_dossie_de_diligencia_inexistente_devolve_404():
 
 def test_cpf_sem_provider_salva_orientacao_no_log(tmp_path, monkeypatch):
     from app.services import diligencia_engine
-    monkeypatch.setattr(diligencia_engine, '_judit_configurada', lambda: False)
 
     client = TestClient(app)
     resp = client.post('/api/diligencia', json={'input': '721.377.971-00'})
