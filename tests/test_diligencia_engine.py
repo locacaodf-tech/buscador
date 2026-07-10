@@ -46,7 +46,6 @@ def _xlsx_com_credor() -> bytes:
 # ---------------------------------------------------------------------------
 
 def test_cpf_sem_provider_orienta_sem_fingir_resultado(monkeypatch):
-    monkeypatch.setattr(diligencia_engine, '_judit_configurada', lambda: False)
     r = asyncio.run(diligencia_engine.run_diligencia('721.377.971-00'))
     assert r['tipo_identificado'] == 'cpf'
     assert r['valor_normalizado'] == '72137797100'
@@ -54,7 +53,6 @@ def test_cpf_sem_provider_orienta_sem_fingir_resultado(monkeypatch):
 
 
 def test_cnpj_sem_provider_orienta_sem_fingir_resultado(monkeypatch):
-    monkeypatch.setattr(diligencia_engine, '_judit_configurada', lambda: False)
     r = asyncio.run(diligencia_engine.run_diligencia('00.000.000/0001-91'))
     assert r['tipo_identificado'] == 'cnpj'
     assert 'provider comercial' in r['proxima_acao_recomendada'].lower()
