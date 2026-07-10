@@ -26,11 +26,13 @@ SINAIS_PRE_RPV_PRECATORIO = [
     ('homologo os cálculos', 'calculo_homologado'), ('homologo os calculos', 'calculo_homologado'),
     ('cálculos homologados', 'calculo_homologado'), ('calculos homologados', 'calculo_homologado'),
     ('cálculo de liquidação', 'calculo_homologado'), ('calculo de liquidacao', 'calculo_homologado'),
+    ('secaj', 'calculo_homologado'),  # setor de cálculos judiciais — pedido explícito do usuário
     ('liquidação de sentença', 'cumprimento_sentenca'), ('liquidacao de sentenca', 'cumprimento_sentenca'),
     ('certidão de trânsito', 'transito_em_julgado'), ('certidao de transito', 'transito_em_julgado'),
     ('trânsito em julgado', 'transito_em_julgado'), ('transito em julgado', 'transito_em_julgado'),
     ('cumprimento de sentença', 'cumprimento_sentenca'), ('cumprimento de sentenca', 'cumprimento_sentenca'),
     ('intime-se para pagamento', 'pre_rpv'),
+    ('julgo procedente', 'sentenca_proferida'), ('sentença', 'sentenca_proferida'), ('sentenca', 'sentenca_proferida'),
 ]
 
 SINAIS_TRABALHISTA = [
