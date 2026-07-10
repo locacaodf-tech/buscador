@@ -16,7 +16,7 @@ app = typer.Typer(help='CLI interna para buscar processos, precatórios, RPVs e 
 def search(
     key: str = typer.Argument(..., help='CPF/CNPJ/nome/OAB/CNJ/processo/requisitório/precatório/RPV'),
     search_type: str = typer.Option('auto', help='auto, cnj, numero_processo, cpf, cnpj, name, oab, requisitorio_number, precatorio_number, rpv_number'),
-    provider: str = typer.Option('auto', help='auto, multi, datajud, judit, tribunal_precatorios'),
+    provider: str = typer.Option('auto', help='auto, multi, datajud, tribunal_precatorios'),
     tribunals: str = typer.Option('', help='Lista separada por vírgula. Ex.: TRF1,TRF3,TJDFT'),
     max_results: int = typer.Option(50),
     precatorio_only: bool = typer.Option(False),
