@@ -186,6 +186,24 @@ def extrair_cidade_uf(texto: str) -> dict[str, str | None]:
     return {'cidade': cidade_achada, 'uf': uf_direta or uf_por_cidade or uf_por_nome_estado}
 
 
+def extrair_credor(texto: str) -> dict[str, Any] | None:
+    """Acha o credor/autor/exequente — o lado OPOSTO ao ente devedor, quem
+    teria o crédito potencial. Prioriza rótulo explícito (Autor, Exequente,
+    Requerente, Polo Ativo), parando em vírgula OU ponto (achado real: um
+    corte só em ponto deixava 'Ana Cristina..., CPF 111' como se fosse
+    nome, vazando fragmento de documento dentro do próprio nome)."""
+    match = re.search(
+        r'(?:autor|exequente|requerente|polo\s+ativo|credor)\s*[:\s]+([^\n,.]{3,80})',
+        texto, re.IGNORECASE,
+    )
+    nome = match.group(1).strip().rstrip('.,;') if match else None
+    if not nome:
+        return None
+    cpf = extrair_cpf(texto)
+    cnpj = extrair_cnpj(texto) if not cpf else None
+    return {'nome': nome, 'cpf': cpf, 'cnpj': cnpj}
+
+
 def extrair_ente_devedor(texto: str) -> str | None:
     """Acha o ente devedor — prioriza o rótulo explícito (Polo Passivo,
     Réu, Executado, Ente devedor), que é mais preciso que só procurar
