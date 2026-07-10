@@ -68,11 +68,18 @@ def processar_publicacoes(publicacoes: list[dict[str, Any]], source: str = 'fixt
         if tribunal:
             tribunais_vistos.add(tribunal)
 
-        if classificacao['signal_type'] in {'descartar'}:
-            continue  # publicação genérica demais, nem vira hit
+        # Escopo pedido pelo usuário: só indexa se for ação contra ente
+        # público (Estado/Município/União/INSS/Fazenda) OU já tiver um
+        # sinal claro de crédito judicial — nunca publicação genérica sem
+        # nenhuma das duas coisas (ex.: "cobrança comum" sem ente público
+        # nem sinal, que não interessa pro negócio e só aumentaria a
+        # quantidade de dado de terceiro retido sem necessidade).
+        if classificacao['signal_type'] in {'descartar', 'lead_fraco', None} and not classificacao['ente_devedor']:
+            continue
 
-        from ..services.whatsapp_intake import extrair_tipo_acao
+        from ..services.whatsapp_intake import extrair_tipo_acao, extrair_credor
         tipo_acao = extrair_tipo_acao(texto)
+        credor = extrair_credor(texto)
 
         hits.append(HitEncontrado(
             source=source, tribunal=tribunal, publication_date=pub.get('data'),
@@ -81,7 +88,11 @@ def processar_publicacoes(publicacoes: list[dict[str, Any]], source: str = 'fixt
             publication_text=texto, matched_terms=classificacao['termos_batidos'],
             signal_type=classificacao['signal_type'], confidence='medium' if cnj_normalizado else 'low',
             source_url=pub.get('url'),
-            raw={'ente_devedor': classificacao['ente_devedor'], 'natureza_alimentar': classificacao['natureza_alimentar'], 'tipo_acao': tipo_acao},
+            raw={
+                'ente_devedor': classificacao['ente_devedor'], 'natureza_alimentar': classificacao['natureza_alimentar'],
+                'tipo_acao': tipo_acao, 'credor_nome': credor['nome'] if credor else None,
+                'credor_cpf': credor.get('cpf') if credor else None, 'credor_cnpj': credor.get('cnpj') if credor else None,
+            },
         ))
 
     return WatcherResult(
