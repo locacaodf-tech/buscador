@@ -194,11 +194,6 @@ def diagnostico_sistema():
             'chave': 'chave pública padrão do CNJ' if datajud_key_source() == 'chave_publica_padrao' else 'chave própria configurada',
             'cobre': 'Consulta por CNJ/número de processo (não busca por CPF/nome).',
         },
-        'judit': {
-            'ativo': bool(settings.judit_enabled and settings.judit_api_key),
-            'cobre': 'Busca por CPF, CNPJ, nome e OAB.',
-            'proxima_acao': None if (settings.judit_enabled and settings.judit_api_key) else 'Não configurada. Busca por nome funciona de graça dentro dos dados do STJ já carregados.',
-        },
         'stj': {
             'arquivo_carregado': len(stj_arquivos) > 0,
             'quantidade_arquivos': len(stj_arquivos),
@@ -843,6 +838,7 @@ def watchers_status():
     from .config import get_settings
     settings_local = get_settings()
     auto_run_bots = getattr(settings_local, 'watchers_auto_run_bots', False)
+    salt_padrao = getattr(settings_local, 'indice_cpf_hash_salt', '') == 'buscador-processos-indice-nacional-salt-dev-only'
     return {
         'watchers': [
             {'name': 'publication_watcher', 'descricao': 'Classifica publicações fornecidas (fixture local ou fonte externa que você conectar) em sinais de oportunidade.', 'fonte': 'fixture_ou_externa'},
@@ -861,6 +857,10 @@ def watchers_status():
             'endpoint': '/api/watchers/run', 'metodo': 'POST',
             'headers_necessarios': 'X-Internal-Token (se INTERNAL_API_TOKEN estiver configurado)',
             'horario_sugerido': '06:00 (antes do expediente)',
+        },
+        'indice_processual': {
+            'usando_salt_padrao': salt_padrao,
+            'aviso': 'Atenção: salt de CPF/CNPJ está usando valor padrão de desenvolvimento; configure INDICE_CPF_HASH_SALT em produção.' if salt_padrao else None,
         },
     }
 
@@ -968,6 +968,34 @@ def leads_export_csv(db: Session = Depends(get_db)):
     return buf.getvalue()
 
 
+@app.get('/api/leads/buscar', dependencies=[Depends(verify_internal_token)])
+def leads_buscar(nome: str | None = None, cpf: str | None = None, cnj: str | None = None, db: Session = Depends(get_db)):
+    """Índice processual (uso pessoal): busca por nome, CPF/CNPJ (via hash,
+    nunca decodifica o número) ou CNJ, entre os leads já capturados —
+    escopados a ações contra ente público com sinal de interesse (ver
+    escopo em publication_watcher.processar_publicacoes). Precisa vir
+    ANTES de /api/leads/{lead_id} no registro de rotas."""
+    from .utils.cpf import hash_document
+    from .utils.cnj import normalize_cnj
+    query = db.query(OpportunityLead).filter(OpportunityLead.status != 'removido')
+    if nome:
+        query = query.filter(OpportunityLead.creditor_name.ilike(f'%{nome}%'))
+    if cpf:
+        h = hash_document(cpf)
+        query = query.filter(OpportunityLead.creditor_document_hash == h)
+    if cnj:
+        n = normalize_cnj(cnj)
+        if n:
+            query = query.filter(OpportunityLead.normalized_cnj.like(f'%{n[:7]}%'))
+    resultados = query.order_by(OpportunityLead.confidence_score.desc()).all()
+    return [{
+        'id': l.id, 'normalized_cnj': l.normalized_cnj, 'tribunal': l.tribunal, 'debtor': l.debtor,
+        'creditor_name': l.creditor_name, 'creditor_document_masked': l.creditor_document_masked,
+        'signal_type': l.signal_type, 'priority': l.priority, 'next_action': l.next_action,
+        'dossie_url': f'/api/leads/{l.id}/dossie',
+    } for l in resultados]
+
+
 @app.get('/api/leads/{lead_id}', dependencies=[Depends(verify_internal_token)])
 def lead_detail(lead_id: int, db: Session = Depends(get_db)):
     lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
@@ -976,10 +1004,30 @@ def lead_detail(lead_id: int, db: Session = Depends(get_db)):
     return {
         'id': lead.id, 'created_at': lead.created_at.isoformat(), 'source': lead.source,
         'process_number': lead.process_number, 'normalized_cnj': lead.normalized_cnj, 'tribunal': lead.tribunal,
-        'debtor': lead.debtor, 'signal_type': lead.signal_type, 'confidence_score': lead.confidence_score,
+        'debtor': lead.debtor, 'creditor_name': lead.creditor_name, 'creditor_document_masked': lead.creditor_document_masked,
+        'signal_type': lead.signal_type, 'confidence_score': lead.confidence_score,
         'priority': lead.priority, 'status': lead.status, 'bot_job_id': lead.bot_job_id,
         'dossie_url': lead.dossie_url, 'next_action': lead.next_action,
     }
+
+
+@app.post('/api/leads/{lead_id}/remover', dependencies=[Depends(verify_internal_token)])
+def lead_remover(lead_id: int, hard: bool = False, db: Session = Depends(get_db)):
+    """Remove um registro do índice/busca. hard=false (padrão): tira da
+    busca. hard=true: anonimização real — limpa nome, documento (mascarado
+    E hash), texto da publicação e URL de origem, não só marca status."""
+    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
+    lead.status = 'removido'
+    if hard:
+        lead.creditor_name = None
+        lead.creditor_document_masked = None
+        lead.creditor_document_hash = None
+        lead.publication_text = '[removido a pedido]'
+        lead.matched_terms = []
+    db.commit()
+    return {'lead_id': lead.id, 'status': lead.status, 'hard': hard}
 
 
 @app.post('/api/leads/{lead_id}/run-bots', dependencies=[Depends(verify_internal_token)])
