@@ -1,9 +1,7 @@
 """Interface preparada para um futuro provider comercial de busca nacional
-por pessoa (Judit, Escavador, Jusbrasil ou outro). NÃO implementado nesta
+por pessoa (Escavador, Jusbrasil ou outro). NÃO implementado nesta
 versão — só a forma, pra não travar quando/se um dia for plugado.
 
-O conector real da Judit já existe em app/connectors/judit.py e continua
-funcionando via /api/search (provider=judit) para quem quiser usar hoje.
 Esta interface é sobre o FUTURO: um jeito único de trocar de provider sem
 reescrever o motor de diligência."""
 from __future__ import annotations
