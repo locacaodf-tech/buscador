@@ -52,6 +52,9 @@ async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] |
         elif watcher_name == 'stj_official_file_watcher':
             from .stj_official_file_watcher import varrer_arquivos_stj
             resultado = await varrer_arquivos_stj(db)
+        elif watcher_name == 'tjsp_precatorio_watcher':
+            from .tjsp_precatorio_watcher import varrer_precatorios_pendentes_tjsp
+            resultado = await varrer_precatorios_pendentes_tjsp()
         else:
             raise ValueError(f'Watcher desconhecido: {watcher_name}')
     except Exception as exc:
