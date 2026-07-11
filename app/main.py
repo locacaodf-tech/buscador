@@ -844,6 +844,7 @@ def watchers_status():
             {'name': 'publication_watcher', 'descricao': 'Classifica publicações fornecidas (fixture local ou fonte externa que você conectar) em sinais de oportunidade.', 'fonte': 'fixture_ou_externa'},
             {'name': 'datajud_movement_watcher', 'descricao': 'Revarre CNJs já conhecidos no DataJud, procurando movimentação nova compatível com sinal de interesse.', 'fonte': 'datajud_real'},
             {'name': 'stj_official_file_watcher', 'descricao': 'Roda o sync oficial do STJ (v30.2) e cria lead pra registro novo desde a última rodada.', 'fonte': 'stj_real'},
+            {'name': 'tjsp_precatorio_watcher', 'descricao': 'Varre a lista pública de precatórios pendentes do TJSP (robots.txt verificado, permite). Mecânica de formulário construída, mas submissão ao vivo ainda não confirmada rodando fora deste sandbox — acione manualmente com {"watcher": "tjsp_precatorio_watcher"} e me diga o resultado.', 'fonte': 'tjsp_nao_verificado_ao_vivo'},
         ],
         'bots_automaticos': {
             'ativado': auto_run_bots,
