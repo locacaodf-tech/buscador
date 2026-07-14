@@ -17,8 +17,10 @@
       <p style="color:#b42318; font-weight:700; margin-top:0;">{{ error }}</p>
       {% endif %}
       <form method="post" action="/login">
+        <label>E-mail</label>
+        <input type="email" name="email" autofocus required autocomplete="username" />
         <label>Senha</label>
-        <input type="password" name="password" autofocus required autocomplete="current-password" />
+        <input type="password" name="password" required autocomplete="current-password" />
         <button type="submit">Entrar</button>
       </form>
     </section>
