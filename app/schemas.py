@@ -312,3 +312,19 @@ class ImportPublicationsRequest(BaseModel):
     texto_colado: str | None = None
     tribunal: str | None = None
     source: str = 'manual_import'
+
+
+class UserCreateRequest(BaseModel):
+    """v36 — criação de usuário: só admin autenticado pode chamar isso.
+    Nunca um endpoint público (achado real de auditoria no BuyerRadar:
+    /register era público e aceitava qualquer role do próprio requisitante)."""
+    email: str
+    full_name: str
+    password: str
+    role: str  # administrador|pesquisador|juridico|comercial|aprovador|visualizador
+
+
+class UserUpdateRequest(BaseModel):
+    role: str | None = None
+    is_active: bool | None = None
+    full_name: str | None = None
