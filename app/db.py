@@ -23,4 +23,6 @@ def get_db():
 
 def init_db():
     from . import models  # noqa: F401
+    from . import models_auth  # noqa: F401
+    from . import models_buyerradar  # noqa: F401
     Base.metadata.create_all(bind=engine)
