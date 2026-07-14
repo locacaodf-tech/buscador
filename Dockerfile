@@ -10,4 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install --with-deps chromium
 COPY . .
 EXPOSE 8000
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# v36: roda as migrations do Alembic ANTES de subir o servidor — garante que
+# o schema (tenant/user/buyerradar) esteja atualizado a cada deploy, sem
+# passo manual. Em DATABASE_URL sqlite (dev local), isso é rápido e seguro;
+# em produção (Postgres), é o mecanismo real de versionamento de schema.
+CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
