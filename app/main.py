@@ -13,10 +13,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from .auth import SESSION_COOKIE_NAME, create_session_token, verify_session_token
+from .services.auth import SESSION_COOKIE_NAME, criar_sessao, revogar_sessao, usuario_da_sessao, verify_password, hash_password, require_permission, get_current_user
+from .models_auth import User, UserRole, Tenant, AuditLogEntry, _novo_uuid
 from .config import get_settings, parse_allowed_origins
 from .db import get_db, init_db
-from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest, BotsRunRequest, BotsResumeRequest, IntakeWhatsappManualRequest, ImportPublicationsRequest
+from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest, BotsRunRequest, BotsResumeRequest, IntakeWhatsappManualRequest, ImportPublicationsRequest, UserCreateRequest, UserUpdateRequest
 from .services import stj_uploads
 from .services import certificate_center
 from .services import source_master
@@ -61,50 +62,63 @@ app.mount('/static', StaticFiles(directory='app/static'), name='static')
 templates = Jinja2Templates(directory='app/templates')
 
 
-def _has_valid_session(request: Request) -> bool:
-    if not settings.app_login_password:
-        return False
+def _has_valid_session(request: Request, db: Session) -> bool:
+    """v36 — checa sessão de usuário real (User + UserSession), não mais
+    senha única compartilhada. Aceita revogação de verdade (basta marcar
+    revoked_at na UserSession), diferente do token assinado antigo que
+    não tinha como ser revogado antes de expirar."""
     cookie = request.cookies.get(SESSION_COOKIE_NAME)
-    return verify_session_token(cookie, settings.app_secret)
+    return usuario_da_sessao(db, cookie) is not None
 
 
-def verify_internal_token(request: Request, x_internal_token: str | None = Header(default=None)):
+def _current_user(request: Request, db: Session) -> User | None:
+    cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    return usuario_da_sessao(db, cookie)
+
+
+def verify_internal_token(request: Request, x_internal_token: str | None = Header(default=None), db: Session = Depends(get_db)):
     """Protege as rotas /api/*.
 
     Aceita QUALQUER um dos dois, quando configurados:
     - header X-Internal-Token == INTERNAL_API_TOKEN (uso por script/CLI/curl);
-    - sessão de login válida (cookie), para quem já entrou pela tela com APP_LOGIN_PASSWORD.
+    - sessão de usuário real logado (cookie), desde a v36.
 
     Se nenhum dos dois estiver configurado, mantém o comportamento original: acesso aberto.
     """
-    if not settings.internal_api_token and not settings.app_login_password:
+    algum_usuario_existe = db.query(User).first() is not None
+    if not settings.internal_api_token and not algum_usuario_existe:
         return
     if settings.internal_api_token and hmac.compare_digest(x_internal_token or '', settings.internal_api_token):
         return
-    if _has_valid_session(request):
+    if _has_valid_session(request, db):
         return
     raise HTTPException(status_code=401, detail='Não autorizado. Faça login na tela ou informe X-Internal-Token.')
 
 
 @app.get('/', response_class=HTMLResponse)
-def index(request: Request):
-    if settings.app_login_password and not _has_valid_session(request):
+def index(request: Request, db: Session = Depends(get_db)):
+    algum_usuario_existe = db.query(User).first() is not None
+    if algum_usuario_existe and not _has_valid_session(request, db):
         return RedirectResponse(url='/login', status_code=303)
+    current_user = _current_user(request, db)
     return templates.TemplateResponse(request, 'index.html', {
         'all_tribunals': ALL_TRIBUNALS,
         'federal_tribunals': FEDERAL_TRIBUNALS,
         'default_precat_tribunals': DEFAULT_PRECAT_TRIBUNALS,
-        'login_enabled': bool(settings.app_login_password),
-        # Achado real da auditoria: em produção sem senha, a ferramenta fica
-        # aberta pra qualquer um com o link. Isso avisa na própria tela,
-        # visível toda vez, em vez de só um log que ninguém vê.
-        'alerta_producao_sem_senha': settings.app_env not in ('local', 'development', 'dev', 'test') and not settings.app_login_password,
+        'login_enabled': algum_usuario_existe,
+        'current_user_name': current_user.full_name if current_user else None,
+        'current_user_role': current_user.role.value if current_user else None,
+        # Achado real da auditoria: em produção sem nenhum usuário criado ainda
+        # (bootstrap não rodado), a ferramenta fica aberta pra qualquer um com
+        # o link. Isso avisa na própria tela, visível toda vez.
+        'alerta_producao_sem_senha': settings.app_env not in ('local', 'development', 'dev', 'test') and not algum_usuario_existe,
     })
 
 
 @app.get('/login', response_class=HTMLResponse)
-def login_form(request: Request):
-    if not settings.app_login_password or _has_valid_session(request):
+def login_form(request: Request, db: Session = Depends(get_db)):
+    algum_usuario_existe = db.query(User).first() is not None
+    if not algum_usuario_existe or _has_valid_session(request, db):
         return RedirectResponse(url='/', status_code=303)
     return templates.TemplateResponse(request, 'login.html', {'error': None})
 
@@ -129,10 +143,7 @@ def _register_login_failure(client_ip: str) -> None:
 
 
 @app.post('/login', response_class=HTMLResponse)
-def login_submit(request: Request, password: str = Form(...)):
-    if not settings.app_login_password:
-        return RedirectResponse(url='/', status_code=303)
-
+def login_submit(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     client_ip = request.client.host if request.client else 'unknown'
     if _login_rate_limited(client_ip):
         return templates.TemplateResponse(
@@ -142,18 +153,22 @@ def login_submit(request: Request, password: str = Form(...)):
             status_code=429,
         )
 
-    # Comparação constant-time: evita que diferenças no tempo de resposta
-    # revelem quantos caracteres da senha estão certos (ataque de timing).
-    if not hmac.compare_digest(password, settings.app_login_password):
+    user = db.query(User).filter(User.email == email, User.is_active.is_(True)).first()
+    # Comparação sempre roda um hash (mesmo sem usuário) pra não vazar, pelo
+    # tempo de resposta, se o e-mail existe ou não (mesmo princípio do
+    # constant-time compare que já usava pra senha única).
+    senha_valida = verify_password(password, user.hashed_password) if user else verify_password(password, hash_password('senha-que-nunca-bate'))
+    if not user or not senha_valida:
         _register_login_failure(client_ip)
         return templates.TemplateResponse(
             request,
             'login.html',
-            {'error': 'Senha incorreta.'},
+            {'error': 'E-mail ou senha incorretos.'},
             status_code=401,
         )
-    token_ttl_seconds = 60 * 60 * 24 * max(1, settings.session_ttl_days)
-    token = create_session_token(settings.app_secret, ttl_seconds=token_ttl_seconds)
+
+    token_ttl_hours = 24 * max(1, settings.session_ttl_days)
+    token = criar_sessao(db, user, user_agent=request.headers.get('user-agent'), ttl_hours=token_ttl_hours)
     response = RedirectResponse(url='/', status_code=303)
     response.set_cookie(
         SESSION_COOKIE_NAME,
@@ -161,13 +176,16 @@ def login_submit(request: Request, password: str = Form(...)):
         httponly=True,
         samesite='lax',
         secure=settings.app_env != 'local',
-        max_age=token_ttl_seconds,
+        max_age=token_ttl_hours * 3600,
     )
     return response
 
 
 @app.get('/logout')
-def logout():
+def logout(request: Request, db: Session = Depends(get_db)):
+    cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    if cookie:
+        revogar_sessao(db, cookie)
     response = RedirectResponse(url='/login', status_code=303)
     response.delete_cookie(SESSION_COOKIE_NAME)
     return response
@@ -411,7 +429,7 @@ def obter_diligencia(diligencia_id: int, db: Session = Depends(get_db)):
 @app.get('/api/diligencias/{diligencia_id}/dossie', response_class=HTMLResponse)
 def dossie_diligencia(diligencia_id: int, request: Request, db: Session = Depends(get_db)):
     """Página HTML simples e imprimível do dossiê de uma diligência salva."""
-    if settings.app_login_password and not _has_valid_session(request):
+    if db.query(User).first() is not None and not _has_valid_session(request, db):
         return RedirectResponse(url='/login', status_code=303)
     log = _diligencia_ou_404(diligencia_id, db)
     return templates.TemplateResponse(request, 'dossie.html', {'log': log})
@@ -1092,7 +1110,7 @@ def lead_dossie(lead_id: int, request: Request, db: Session = Depends(get_db)):
     (achado real: só existia dossiê do BotJob, que exige ter rodado bots
     primeiro — agora o lead tem uma página própria desde o momento em
     que é criado)."""
-    if settings.app_login_password and not _has_valid_session(request):
+    if db.query(User).first() is not None and not _has_valid_session(request, db):
         return RedirectResponse(url='/login', status_code=303)
     lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
     if not lead:
@@ -1151,6 +1169,90 @@ async def watchers_import_publications(request: ImportPublicationsRequest, db: S
     return {'total_publicacoes_recebidas': len(publicacoes), **resultado}
 
 
+@app.post('/api/admin/users')
+def admin_criar_usuario(payload: UserCreateRequest, current_user: User = Depends(require_permission('admin:usuarios')), db: Session = Depends(get_db)):
+    """v36 — só administrador cria usuário. Nunca público (é exatamente o
+    inverso da vulnerabilidade encontrada no BuyerRadar original)."""
+    try:
+        role = UserRole(payload.role)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f'Papel inválido: {payload.role}. Use um de: {[r.value for r in UserRole]}')
+
+    existente = db.query(User).filter(User.tenant_id == current_user.tenant_id, User.email == payload.email).first()
+    if existente:
+        raise HTTPException(status_code=409, detail=f'Já existe um usuário com o e-mail {payload.email} neste tenant.')
+
+    novo = User(
+        id=_novo_uuid(), tenant_id=current_user.tenant_id, email=payload.email, full_name=payload.full_name,
+        hashed_password=hash_password(payload.password), role=role, is_active=True,
+        created_by_user_id=current_user.id,
+    )
+    db.add(novo)
+    db.add(AuditLogEntry(tenant_id=current_user.tenant_id, user_id=current_user.id, action='criar_usuario', resource_type='user', resource_id=novo.id, details={'email': payload.email, 'role': role.value}))
+    db.commit()
+    db.refresh(novo)
+    return {'id': novo.id, 'email': novo.email, 'full_name': novo.full_name, 'role': novo.role.value, 'is_active': novo.is_active}
+
+
+@app.get('/api/admin/users')
+def admin_listar_usuarios(current_user: User = Depends(require_permission('admin:usuarios')), db: Session = Depends(get_db)):
+    usuarios = db.query(User).filter(User.tenant_id == current_user.tenant_id).order_by(User.created_at).all()
+    return [{'id': u.id, 'email': u.email, 'full_name': u.full_name, 'role': u.role.value, 'is_active': u.is_active, 'created_at': u.created_at.isoformat()} for u in usuarios]
+
+
+@app.patch('/api/admin/users/{user_id}')
+def admin_atualizar_usuario(user_id: str, payload: UserUpdateRequest, current_user: User = Depends(require_permission('admin:usuarios')), db: Session = Depends(get_db)):
+    alvo = db.query(User).filter(User.id == user_id, User.tenant_id == current_user.tenant_id).first()
+    if not alvo:
+        raise HTTPException(status_code=404, detail='Usuário não encontrado.')
+
+    if payload.role is not None:
+        # "Nenhum usuário poderá alterar o próprio papel" — pedido explícito,
+        # vale até pra administrador mexendo no próprio papel.
+        if alvo.id == current_user.id:
+            raise HTTPException(status_code=403, detail='Você não pode alterar o seu próprio papel.')
+        try:
+            alvo.role = UserRole(payload.role)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f'Papel inválido: {payload.role}.')
+    if payload.is_active is not None:
+        if alvo.id == current_user.id and not payload.is_active:
+            raise HTTPException(status_code=403, detail='Você não pode desativar a si mesmo.')
+        alvo.is_active = payload.is_active
+        if not payload.is_active:
+            from .services.auth import revogar_todas_sessoes_do_usuario
+            revogar_todas_sessoes_do_usuario(db, alvo.id)
+    if payload.full_name is not None:
+        alvo.full_name = payload.full_name
+
+    db.add(AuditLogEntry(tenant_id=current_user.tenant_id, user_id=current_user.id, action='atualizar_usuario', resource_type='user', resource_id=alvo.id, details=payload.model_dump(exclude_none=True)))
+    db.commit()
+    return {'id': alvo.id, 'email': alvo.email, 'role': alvo.role.value, 'is_active': alvo.is_active}
+
+
+@app.post('/api/admin/users/{user_id}/revoke-sessions')
+def admin_revogar_sessoes(user_id: str, current_user: User = Depends(require_permission('admin:usuarios')), db: Session = Depends(get_db)):
+    from .services.auth import revogar_todas_sessoes_do_usuario
+    alvo = db.query(User).filter(User.id == user_id, User.tenant_id == current_user.tenant_id).first()
+    if not alvo:
+        raise HTTPException(status_code=404, detail='Usuário não encontrado.')
+    total = revogar_todas_sessoes_do_usuario(db, alvo.id)
+    db.add(AuditLogEntry(tenant_id=current_user.tenant_id, user_id=current_user.id, action='revogar_sessoes', resource_type='user', resource_id=alvo.id, details={'total_revogadas': total}))
+    db.commit()
+    return {'user_id': alvo.id, 'sessoes_revogadas': total}
+
+
+@app.get('/api/admin/audit-log')
+def admin_audit_log(limit: int = 100, current_user: User = Depends(require_permission('admin:usuarios')), db: Session = Depends(get_db)):
+    entradas = db.query(AuditLogEntry).filter(AuditLogEntry.tenant_id == current_user.tenant_id).order_by(AuditLogEntry.created_at.desc()).limit(limit).all()
+    return [{'id': e.id, 'user_id': e.user_id, 'action': e.action, 'resource_type': e.resource_type, 'resource_id': e.resource_id, 'details': e.details, 'created_at': e.created_at.isoformat()} for e in entradas]
+
+
+@app.get('/api/me')
+def meu_usuario(current_user: User = Depends(get_current_user)):
+    return {'id': current_user.id, 'email': current_user.email, 'full_name': current_user.full_name, 'role': current_user.role.value, 'tenant_id': current_user.tenant_id}
+
+
 @app.get('/api/whatsapp/webhook')
 def whatsapp_webhook_verify(request: Request):
     """Verificação do webhook da Meta (WhatsApp Business Cloud API) —
@@ -1177,7 +1279,7 @@ async def whatsapp_webhook_receive(request: Request, db: Session = Depends(get_d
 def bots_job_dossie(job_id: int, request: Request, db: Session = Depends(get_db)):
     """Página HTML do que os bots fizeram num job — input, tipo, status
     geral, cada bot com seu status/evidência/próxima ação."""
-    if settings.app_login_password and not _has_valid_session(request):
+    if db.query(User).first() is not None and not _has_valid_session(request, db):
         return RedirectResponse(url='/login', status_code=303)
     job = db.query(BotJob).filter(BotJob.id == job_id).first()
     if not job:
