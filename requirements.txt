@@ -12,3 +12,8 @@ typer==0.15.1
 rich==13.9.4
 openpyxl==3.1.5
 playwright==1.49.0
+alembic==1.13.2
+psycopg2-binary==2.9.9
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
