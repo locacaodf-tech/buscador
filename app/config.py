@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # padrão de desenvolvimento; em produção PRECISA ser sobrescrito
     # (o health-check avisa se continuar no padrão).
     indice_cpf_hash_salt: str = 'buscador-processos-indice-nacional-salt-dev-only'
+    # v36 Fase 1 (preparação pra Fase 5): trava técnica de produção pro envio
+    # real de campanha — nunca liga sozinha. Precisa de TODAS as condições:
+    # esta flag=true + credenciais válidas do provedor de e-mail + usuário
+    # com papel de aprovador + campanha formalmente aprovada no banco.
+    campaign_sending_enabled: bool = False
 
     internal_api_token: str = ''
     # Senha simples para proteger a tela (login por sessão via cookie).
