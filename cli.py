@@ -198,5 +198,81 @@ def migrate_buyerradar(
     db.close()
 
 
+
+
+@app.command()
+def prepare_v36_migration(
+    yes: bool = typer.Option(False, '--yes', help='Confirma que você já tem backup do banco. Sem isso, o comando só inspeciona.'),
+):
+    """v36.1 — Prepara um banco v35 EXISTENTE pra receber as tabelas novas
+    da v36, SEM recriar as tabelas antigas (que já existem).
+
+    O problema que isto resolve (achado da auditoria): rodar 'alembic
+    upgrade head' direto sobre um banco v35 quebra com 'table bot_jobs
+    already exists', porque a baseline tenta criar tabelas que já estão lá.
+
+    O que este comando faz:
+    1. inspeciona o banco e valida que ele tem o schema v35 esperado;
+    2. se for banco v35 válido e ainda não versionado, carimba (stamp) a
+       revision baseline SEM recriar nada;
+    3. deixa o banco pronto pra um 'alembic upgrade head' aplicar só o
+       incremental (tabelas novas + tenant_id + backfill).
+
+    Nunca marca um banco incompatível como migrado.
+    """
+    from sqlalchemy import create_engine, inspect
+    from alembic.config import Config
+    from alembic import command
+    from app.config import get_settings
+
+    db_url = get_settings().database_url
+    engine = create_engine(db_url)
+    inspector = inspect(engine)
+    tabelas = set(inspector.get_table_names())
+
+    TABELAS_V35 = {
+        'search_logs', 'process_results', 'certificate_records', 'manual_evidences',
+        'diligencia_logs', 'bot_jobs', 'bot_steps', 'stj_official_files', 'leads',
+        'whatsapp_messages', 'intake_cases', 'watcher_runs', 'publication_hits', 'opportunity_leads',
+    }
+
+    print(f'[cyan]Banco:[/cyan] {db_url}')
+    print(f'[cyan]Tabelas encontradas:[/cyan] {len(tabelas)}')
+
+    # Já versionado pelo Alembic?
+    if 'alembic_version' in tabelas:
+        rev = engine.connect().execute(__import__('sqlalchemy').text('SELECT version_num FROM alembic_version')).fetchone()
+        print(f'[yellow]Banco já está sob controle do Alembic (revision {rev[0] if rev else "?"}).[/yellow]')
+        print('Rode diretamente: [bold]alembic upgrade head[/bold]')
+        raise typer.Exit(code=0)
+
+    # Banco vazio? Então não é upgrade — é instalação limpa.
+    if not (TABELAS_V35 & tabelas):
+        print('[yellow]Banco vazio (sem tabelas v35).[/yellow] Não precisa preparar — rode direto: [bold]alembic upgrade head[/bold]')
+        raise typer.Exit(code=0)
+
+    # Valida o schema v35 tabela por tabela.
+    faltando = TABELAS_V35 - tabelas
+    if faltando:
+        print(f'[red]Schema v35 incompatível — faltam tabelas esperadas:[/red] {sorted(faltando)}')
+        print('[red]Não vou carimbar este banco. Verifique se é mesmo um banco da v35.[/red]')
+        raise typer.Exit(code=1)
+
+    print('[green]Schema v35 válido — todas as 14 tabelas esperadas estão presentes.[/green]')
+
+    if not yes:
+        print('\n[yellow]DRY RUN.[/yellow] Este comando vai CARIMBAR o banco na revision baseline (605e28a0a5b4)')
+        print('e NÃO recriar as tabelas antigas. Depois você roda "alembic upgrade head".')
+        print('Faça backup do banco antes. Quando tiver backup, rode de novo com [bold]--yes[/bold].')
+        raise typer.Exit(code=0)
+
+    # Carimba a baseline sem rodar o upgrade dela.
+    alembic_cfg = Config('alembic.ini')
+    command.stamp(alembic_cfg, '605e28a0a5b4')
+    print('[green]Banco carimbado na baseline v35.[/green] Agora rode: [bold]alembic upgrade head[/bold]')
+    print('Isso vai adicionar as tabelas novas (tenant/user/buyerradar), a coluna tenant_id')
+    print('e associar todos os registros antigos ao tenant MeuPrecatórioBR.')
+
+
 if __name__ == '__main__':
     app()

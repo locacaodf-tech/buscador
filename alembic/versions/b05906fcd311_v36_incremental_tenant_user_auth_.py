@@ -1,8 +1,8 @@
-"""schema inicial: tabelas existentes + tenant/user/auth + buyerradar
+"""v36 incremental tenant user auth buyerradar tenant_id
 
-Revision ID: 0829846b894e
-Revises: 
-Create Date: 2026-07-14 19:17:03.448216
+Revision ID: b05906fcd311
+Revises: 605e28a0a5b4
+Create Date: 2026-07-16 10:53:03.792234
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '0829846b894e'
-down_revision: Union[str, None] = None
+revision: str = 'b05906fcd311'
+down_revision: Union[str, None] = '605e28a0a5b4'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -32,218 +32,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_audit_log_entries_tenant_id'), 'audit_log_entries', ['tenant_id'], unique=False)
-    op.create_table('bot_jobs',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('updated_at', sa.DateTime(), nullable=False),
-    sa.Column('input_original', sa.String(length=500), nullable=False),
-    sa.Column('tipo_identificado', sa.String(length=50), nullable=False),
-    sa.Column('objetivo', sa.String(length=30), nullable=False),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.Column('resumo_humano', sa.Text(), nullable=True),
-    sa.Column('proxima_acao', sa.Text(), nullable=True),
-    sa.Column('raw', sa.JSON(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_bot_jobs_id'), 'bot_jobs', ['id'], unique=False)
-    op.create_table('bot_steps',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('job_id', sa.Integer(), nullable=False),
-    sa.Column('bot_name', sa.String(length=50), nullable=False),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.Column('started_at', sa.DateTime(), nullable=False),
-    sa.Column('finished_at', sa.DateTime(), nullable=True),
-    sa.Column('resultado', sa.JSON(), nullable=True),
-    sa.Column('warning', sa.Text(), nullable=True),
-    sa.Column('erro', sa.Text(), nullable=True),
-    sa.Column('evidence_id', sa.Integer(), nullable=True),
-    sa.Column('next_action', sa.Text(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_bot_steps_id'), 'bot_steps', ['id'], unique=False)
-    op.create_index(op.f('ix_bot_steps_job_id'), 'bot_steps', ['job_id'], unique=False)
-    op.create_table('certificate_records',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('source_id', sa.String(length=80), nullable=False),
-    sa.Column('certificate_type', sa.String(length=50), nullable=False),
-    sa.Column('document_masked', sa.String(length=50), nullable=True),
-    sa.Column('name_consulted', sa.String(length=255), nullable=True),
-    sa.Column('status', sa.String(length=60), nullable=False),
-    sa.Column('message', sa.Text(), nullable=True),
-    sa.Column('validation_code', sa.String(length=255), nullable=True),
-    sa.Column('pdf_path', sa.String(length=500), nullable=True),
-    sa.Column('fonte_url', sa.String(length=500), nullable=True),
-    sa.Column('issued_at', sa.String(length=50), nullable=True),
-    sa.Column('valid_until', sa.String(length=50), nullable=True),
-    sa.Column('raw', sa.JSON(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_certificate_records_id'), 'certificate_records', ['id'], unique=False)
-    op.create_index(op.f('ix_certificate_records_source_id'), 'certificate_records', ['source_id'], unique=False)
-    op.create_table('diligencia_logs',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('input_original', sa.String(length=500), nullable=False),
-    sa.Column('tipo_identificado', sa.String(length=50), nullable=False),
-    sa.Column('valor_normalizado', sa.String(length=500), nullable=False),
-    sa.Column('objetivo', sa.String(length=30), nullable=False),
-    sa.Column('status', sa.String(length=30), nullable=False),
-    sa.Column('resumo_humano', sa.Text(), nullable=True),
-    sa.Column('proxima_acao_recomendada', sa.Text(), nullable=True),
-    sa.Column('resultados_confirmados', sa.JSON(), nullable=True),
-    sa.Column('indicios', sa.JSON(), nullable=True),
-    sa.Column('pendencias', sa.JSON(), nullable=True),
-    sa.Column('fontes_manuais_recomendadas', sa.JSON(), nullable=True),
-    sa.Column('raw_avancado', sa.JSON(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_diligencia_logs_id'), 'diligencia_logs', ['id'], unique=False)
-    op.create_table('intake_cases',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('lead_id', sa.Integer(), nullable=False),
-    sa.Column('input_original', sa.Text(), nullable=False),
-    sa.Column('dados_extraidos', sa.JSON(), nullable=True),
-    sa.Column('processos_detectados', sa.JSON(), nullable=True),
-    sa.Column('divergencias', sa.JSON(), nullable=True),
-    sa.Column('dados_faltantes', sa.JSON(), nullable=True),
-    sa.Column('resposta_sugerida', sa.Text(), nullable=True),
-    sa.Column('job_id', sa.Integer(), nullable=True),
-    sa.Column('job_id_referencia', sa.Integer(), nullable=True),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_intake_cases_id'), 'intake_cases', ['id'], unique=False)
-    op.create_index(op.f('ix_intake_cases_lead_id'), 'intake_cases', ['lead_id'], unique=False)
-    op.create_table('leads',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('telefone', sa.String(length=30), nullable=True),
-    sa.Column('nome', sa.String(length=255), nullable=True),
-    sa.Column('cpf', sa.String(length=20), nullable=True),
-    sa.Column('cnpj', sa.String(length=20), nullable=True),
-    sa.Column('origem', sa.String(length=30), nullable=False),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_leads_id'), 'leads', ['id'], unique=False)
-    op.create_table('manual_evidences',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('fonte', sa.String(length=255), nullable=False),
-    sa.Column('referencia', sa.String(length=255), nullable=True),
-    sa.Column('texto', sa.Text(), nullable=True),
-    sa.Column('arquivo_nome', sa.String(length=255), nullable=True),
-    sa.Column('arquivo_caminho', sa.String(length=500), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_manual_evidences_id'), 'manual_evidences', ['id'], unique=False)
-    op.create_table('opportunity_leads',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('dedupe_key', sa.String(length=200), nullable=True),
-    sa.Column('first_seen_at', sa.DateTime(), nullable=True),
-    sa.Column('last_seen_at', sa.DateTime(), nullable=True),
-    sa.Column('seen_count', sa.Integer(), nullable=False),
-    sa.Column('source', sa.String(length=50), nullable=False),
-    sa.Column('process_number', sa.String(length=40), nullable=True),
-    sa.Column('normalized_cnj', sa.String(length=20), nullable=True),
-    sa.Column('tribunal', sa.String(length=20), nullable=True),
-    sa.Column('segment', sa.String(length=50), nullable=True),
-    sa.Column('uf', sa.String(length=5), nullable=True),
-    sa.Column('debtor', sa.String(length=255), nullable=True),
-    sa.Column('creditor_name', sa.String(length=255), nullable=True),
-    sa.Column('creditor_document_masked', sa.String(length=20), nullable=True),
-    sa.Column('creditor_document_hash', sa.String(length=64), nullable=True),
-    sa.Column('lawyer_name', sa.String(length=255), nullable=True),
-    sa.Column('signal_type', sa.String(length=30), nullable=True),
-    sa.Column('phase', sa.String(length=50), nullable=True),
-    sa.Column('estimated_opportunity_type', sa.String(length=50), nullable=True),
-    sa.Column('confidence_score', sa.Integer(), nullable=False),
-    sa.Column('priority', sa.String(length=10), nullable=False),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.Column('bot_job_id', sa.Integer(), nullable=True),
-    sa.Column('dossie_url', sa.String(length=200), nullable=True),
-    sa.Column('next_action', sa.Text(), nullable=True),
-    sa.Column('publication_text', sa.Text(), nullable=True),
-    sa.Column('matched_terms', sa.JSON(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_opportunity_leads_creditor_document_hash'), 'opportunity_leads', ['creditor_document_hash'], unique=False)
-    op.create_index(op.f('ix_opportunity_leads_dedupe_key'), 'opportunity_leads', ['dedupe_key'], unique=False)
-    op.create_index(op.f('ix_opportunity_leads_id'), 'opportunity_leads', ['id'], unique=False)
-    op.create_table('process_results',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('search_log_id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('provider', sa.String(length=50), nullable=False),
-    sa.Column('tribunal', sa.String(length=50), nullable=True),
-    sa.Column('numero_processo', sa.String(length=50), nullable=True),
-    sa.Column('classe', sa.String(length=255), nullable=True),
-    sa.Column('assunto', sa.Text(), nullable=True),
-    sa.Column('orgao_julgador', sa.Text(), nullable=True),
-    sa.Column('data_ajuizamento', sa.String(length=50), nullable=True),
-    sa.Column('ultima_atualizacao', sa.String(length=50), nullable=True),
-    sa.Column('precatorio_score', sa.Integer(), nullable=False),
-    sa.Column('precatorio_flags', sa.JSON(), nullable=True),
-    sa.Column('raw', sa.JSON(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_process_results_id'), 'process_results', ['id'], unique=False)
-    op.create_index(op.f('ix_process_results_numero_processo'), 'process_results', ['numero_processo'], unique=False)
-    op.create_index(op.f('ix_process_results_search_log_id'), 'process_results', ['search_log_id'], unique=False)
-    op.create_table('publication_hits',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('watcher_run_id', sa.Integer(), nullable=False),
-    sa.Column('source', sa.String(length=50), nullable=False),
-    sa.Column('tribunal', sa.String(length=20), nullable=True),
-    sa.Column('publication_date', sa.String(length=20), nullable=True),
-    sa.Column('process_number', sa.String(length=40), nullable=True),
-    sa.Column('normalized_cnj', sa.String(length=20), nullable=True),
-    sa.Column('parties_text', sa.Text(), nullable=True),
-    sa.Column('lawyers_text', sa.Text(), nullable=True),
-    sa.Column('publication_text', sa.Text(), nullable=True),
-    sa.Column('text_hash', sa.String(length=64), nullable=True),
-    sa.Column('matched_terms', sa.JSON(), nullable=True),
-    sa.Column('signal_type', sa.String(length=30), nullable=True),
-    sa.Column('confidence', sa.String(length=10), nullable=True),
-    sa.Column('source_url', sa.String(length=500), nullable=True),
-    sa.Column('raw', sa.JSON(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_publication_hits_id'), 'publication_hits', ['id'], unique=False)
-    op.create_index(op.f('ix_publication_hits_text_hash'), 'publication_hits', ['text_hash'], unique=False)
-    op.create_index(op.f('ix_publication_hits_watcher_run_id'), 'publication_hits', ['watcher_run_id'], unique=False)
-    op.create_table('search_logs',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('provider', sa.String(length=50), nullable=False),
-    sa.Column('search_type', sa.String(length=50), nullable=False),
-    sa.Column('search_key_masked', sa.String(length=255), nullable=False),
-    sa.Column('tribunals', sa.Text(), nullable=False),
-    sa.Column('status', sa.String(length=50), nullable=False),
-    sa.Column('raw_request', sa.JSON(), nullable=True),
-    sa.Column('notes', sa.Text(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_search_logs_id'), 'search_logs', ['id'], unique=False)
-    op.create_table('stj_official_files',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('year', sa.Integer(), nullable=True),
-    sa.Column('natureza', sa.String(length=50), nullable=True),
-    sa.Column('entidade_devedora', sa.String(length=255), nullable=True),
-    sa.Column('source_url', sa.String(length=1000), nullable=False),
-    sa.Column('local_path', sa.String(length=500), nullable=True),
-    sa.Column('original_filename', sa.String(length=255), nullable=True),
-    sa.Column('downloaded_at', sa.DateTime(), nullable=True),
-    sa.Column('file_hash', sa.String(length=64), nullable=True),
-    sa.Column('row_count', sa.Integer(), nullable=True),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.Column('error', sa.Text(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_stj_official_files_id'), 'stj_official_files', ['id'], unique=False)
     op.create_table('tenants',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('slug', sa.String(length=80), nullable=False),
@@ -253,34 +41,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('slug')
     )
-    op.create_table('watcher_runs',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('watcher_name', sa.String(length=50), nullable=False),
-    sa.Column('started_at', sa.DateTime(), nullable=False),
-    sa.Column('finished_at', sa.DateTime(), nullable=True),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.Column('date_from', sa.String(length=20), nullable=True),
-    sa.Column('date_to', sa.String(length=20), nullable=True),
-    sa.Column('tribunals_scanned', sa.JSON(), nullable=True),
-    sa.Column('total_publications', sa.Integer(), nullable=False),
-    sa.Column('total_matches', sa.Integer(), nullable=False),
-    sa.Column('total_leads_created', sa.Integer(), nullable=False),
-    sa.Column('error', sa.Text(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_watcher_runs_id'), 'watcher_runs', ['id'], unique=False)
-    op.create_table('whatsapp_messages',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('lead_id', sa.Integer(), nullable=False),
-    sa.Column('telefone', sa.String(length=30), nullable=True),
-    sa.Column('texto_original', sa.Text(), nullable=True),
-    sa.Column('arquivo_evidencia', sa.String(length=500), nullable=True),
-    sa.Column('received_at', sa.DateTime(), nullable=False),
-    sa.Column('raw', sa.JSON(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_whatsapp_messages_id'), 'whatsapp_messages', ['id'], unique=False)
-    op.create_index(op.f('ix_whatsapp_messages_lead_id'), 'whatsapp_messages', ['lead_id'], unique=False)
     op.create_table('organizations',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('legal_name', sa.String(length=255), nullable=False),
@@ -599,11 +359,91 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_outbound_messages_campaign_recipient_id'), 'outbound_messages', ['campaign_recipient_id'], unique=False)
     op.create_index(op.f('ix_outbound_messages_tenant_id'), 'outbound_messages', ['tenant_id'], unique=False)
+    op.add_column('bot_jobs', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_bot_jobs_tenant_id'), 'bot_jobs', ['tenant_id'], unique=False)
+    op.add_column('bot_steps', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_bot_steps_tenant_id'), 'bot_steps', ['tenant_id'], unique=False)
+    op.add_column('certificate_records', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_certificate_records_tenant_id'), 'certificate_records', ['tenant_id'], unique=False)
+    op.add_column('diligencia_logs', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_diligencia_logs_tenant_id'), 'diligencia_logs', ['tenant_id'], unique=False)
+    op.add_column('intake_cases', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_intake_cases_tenant_id'), 'intake_cases', ['tenant_id'], unique=False)
+    op.add_column('leads', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_leads_tenant_id'), 'leads', ['tenant_id'], unique=False)
+    op.add_column('manual_evidences', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_manual_evidences_tenant_id'), 'manual_evidences', ['tenant_id'], unique=False)
+    op.add_column('opportunity_leads', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_opportunity_leads_tenant_id'), 'opportunity_leads', ['tenant_id'], unique=False)
+    op.add_column('process_results', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_process_results_tenant_id'), 'process_results', ['tenant_id'], unique=False)
+    op.add_column('publication_hits', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_publication_hits_tenant_id'), 'publication_hits', ['tenant_id'], unique=False)
+    op.add_column('search_logs', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_search_logs_tenant_id'), 'search_logs', ['tenant_id'], unique=False)
+    op.add_column('stj_official_files', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_stj_official_files_tenant_id'), 'stj_official_files', ['tenant_id'], unique=False)
+    op.add_column('watcher_runs', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_watcher_runs_tenant_id'), 'watcher_runs', ['tenant_id'], unique=False)
+    op.add_column('whatsapp_messages', sa.Column('tenant_id', sa.String(length=36), nullable=True))
+    op.create_index(op.f('ix_whatsapp_messages_tenant_id'), 'whatsapp_messages', ['tenant_id'], unique=False)
     # ### end Alembic commands ###
+
+    # v36.1 — BACKFILL: todo registro legado (criado na v35, sem tenant)
+    # precisa passar a pertencer a um tenant, senão o filtro por tenant
+    # esconderia tudo. Cria o tenant padrão MeuPrecatórioBR (se não existir)
+    # e associa TODOS os registros antigos a ele.
+    import uuid as _uuid
+    from datetime import datetime as _dt, timezone as _tz
+    bind = op.get_bind()
+    tenant_existente = bind.execute(sa.text("SELECT id FROM tenants WHERE slug = 'meuprecatoriobr'")).fetchone()
+    if tenant_existente:
+        tenant_id = tenant_existente[0]
+    else:
+        tenant_id = str(_uuid.uuid4())
+        bind.execute(
+            sa.text('INSERT INTO tenants (id, slug, nome, ativo, created_at) VALUES (:id, :slug, :nome, :ativo, :created_at)'),
+            {'id': tenant_id, 'slug': 'meuprecatoriobr', 'nome': 'MeuPrecatórioBR', 'ativo': True, 'created_at': _dt.now(_tz.utc)},
+        )
+    for tabela in [
+        'search_logs', 'process_results', 'certificate_records', 'manual_evidences',
+        'diligencia_logs', 'bot_jobs', 'bot_steps', 'stj_official_files', 'leads',
+        'whatsapp_messages', 'intake_cases', 'watcher_runs', 'publication_hits', 'opportunity_leads',
+    ]:
+        bind.execute(sa.text(f'UPDATE {tabela} SET tenant_id = :tid WHERE tenant_id IS NULL'), {'tid': tenant_id})
+    # ### end backfill ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_whatsapp_messages_tenant_id'), table_name='whatsapp_messages')
+    op.drop_column('whatsapp_messages', 'tenant_id')
+    op.drop_index(op.f('ix_watcher_runs_tenant_id'), table_name='watcher_runs')
+    op.drop_column('watcher_runs', 'tenant_id')
+    op.drop_index(op.f('ix_stj_official_files_tenant_id'), table_name='stj_official_files')
+    op.drop_column('stj_official_files', 'tenant_id')
+    op.drop_index(op.f('ix_search_logs_tenant_id'), table_name='search_logs')
+    op.drop_column('search_logs', 'tenant_id')
+    op.drop_index(op.f('ix_publication_hits_tenant_id'), table_name='publication_hits')
+    op.drop_column('publication_hits', 'tenant_id')
+    op.drop_index(op.f('ix_process_results_tenant_id'), table_name='process_results')
+    op.drop_column('process_results', 'tenant_id')
+    op.drop_index(op.f('ix_opportunity_leads_tenant_id'), table_name='opportunity_leads')
+    op.drop_column('opportunity_leads', 'tenant_id')
+    op.drop_index(op.f('ix_manual_evidences_tenant_id'), table_name='manual_evidences')
+    op.drop_column('manual_evidences', 'tenant_id')
+    op.drop_index(op.f('ix_leads_tenant_id'), table_name='leads')
+    op.drop_column('leads', 'tenant_id')
+    op.drop_index(op.f('ix_intake_cases_tenant_id'), table_name='intake_cases')
+    op.drop_column('intake_cases', 'tenant_id')
+    op.drop_index(op.f('ix_diligencia_logs_tenant_id'), table_name='diligencia_logs')
+    op.drop_column('diligencia_logs', 'tenant_id')
+    op.drop_index(op.f('ix_certificate_records_tenant_id'), table_name='certificate_records')
+    op.drop_column('certificate_records', 'tenant_id')
+    op.drop_index(op.f('ix_bot_steps_tenant_id'), table_name='bot_steps')
+    op.drop_column('bot_steps', 'tenant_id')
+    op.drop_index(op.f('ix_bot_jobs_tenant_id'), table_name='bot_jobs')
+    op.drop_column('bot_jobs', 'tenant_id')
     op.drop_index(op.f('ix_outbound_messages_tenant_id'), table_name='outbound_messages')
     op.drop_index(op.f('ix_outbound_messages_campaign_recipient_id'), table_name='outbound_messages')
     op.drop_table('outbound_messages')
@@ -659,45 +499,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_organizations_legal_name'), table_name='organizations')
     op.drop_index(op.f('ix_organizations_cnpj'), table_name='organizations')
     op.drop_table('organizations')
-    op.drop_index(op.f('ix_whatsapp_messages_lead_id'), table_name='whatsapp_messages')
-    op.drop_index(op.f('ix_whatsapp_messages_id'), table_name='whatsapp_messages')
-    op.drop_table('whatsapp_messages')
-    op.drop_index(op.f('ix_watcher_runs_id'), table_name='watcher_runs')
-    op.drop_table('watcher_runs')
     op.drop_table('tenants')
-    op.drop_index(op.f('ix_stj_official_files_id'), table_name='stj_official_files')
-    op.drop_table('stj_official_files')
-    op.drop_index(op.f('ix_search_logs_id'), table_name='search_logs')
-    op.drop_table('search_logs')
-    op.drop_index(op.f('ix_publication_hits_watcher_run_id'), table_name='publication_hits')
-    op.drop_index(op.f('ix_publication_hits_text_hash'), table_name='publication_hits')
-    op.drop_index(op.f('ix_publication_hits_id'), table_name='publication_hits')
-    op.drop_table('publication_hits')
-    op.drop_index(op.f('ix_process_results_search_log_id'), table_name='process_results')
-    op.drop_index(op.f('ix_process_results_numero_processo'), table_name='process_results')
-    op.drop_index(op.f('ix_process_results_id'), table_name='process_results')
-    op.drop_table('process_results')
-    op.drop_index(op.f('ix_opportunity_leads_id'), table_name='opportunity_leads')
-    op.drop_index(op.f('ix_opportunity_leads_dedupe_key'), table_name='opportunity_leads')
-    op.drop_index(op.f('ix_opportunity_leads_creditor_document_hash'), table_name='opportunity_leads')
-    op.drop_table('opportunity_leads')
-    op.drop_index(op.f('ix_manual_evidences_id'), table_name='manual_evidences')
-    op.drop_table('manual_evidences')
-    op.drop_index(op.f('ix_leads_id'), table_name='leads')
-    op.drop_table('leads')
-    op.drop_index(op.f('ix_intake_cases_lead_id'), table_name='intake_cases')
-    op.drop_index(op.f('ix_intake_cases_id'), table_name='intake_cases')
-    op.drop_table('intake_cases')
-    op.drop_index(op.f('ix_diligencia_logs_id'), table_name='diligencia_logs')
-    op.drop_table('diligencia_logs')
-    op.drop_index(op.f('ix_certificate_records_source_id'), table_name='certificate_records')
-    op.drop_index(op.f('ix_certificate_records_id'), table_name='certificate_records')
-    op.drop_table('certificate_records')
-    op.drop_index(op.f('ix_bot_steps_job_id'), table_name='bot_steps')
-    op.drop_index(op.f('ix_bot_steps_id'), table_name='bot_steps')
-    op.drop_table('bot_steps')
-    op.drop_index(op.f('ix_bot_jobs_id'), table_name='bot_jobs')
-    op.drop_table('bot_jobs')
     op.drop_index(op.f('ix_audit_log_entries_tenant_id'), table_name='audit_log_entries')
     op.drop_table('audit_log_entries')
     # ### end Alembic commands ###
