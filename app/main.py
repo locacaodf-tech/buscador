@@ -40,7 +40,13 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    # v36.1 — em produção, o schema é responsabilidade do Alembic (roda no
+    # CMD do Docker: 'alembic upgrade head && uvicorn...'). Rodar create_all
+    # aqui poderia mascarar uma migration faltante e gerar divergência de
+    # schema silenciosa (achado da auditoria). Em dev/teste, create_all é
+    # conveniente e seguro.
+    if settings.app_env in ('local', 'development', 'dev', 'test'):
+        init_db()
     yield
 
 
@@ -252,12 +258,47 @@ def logout(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get('/health')
-def health():
-    return {'status': 'ok'}
+def health(db: Session = Depends(get_db)):
+    """v36.1 — health-check enriquecido: além de 'ok', reporta o estado do
+    banco (conectado, dialect, revision Alembic atual vs esperada),
+    quantidade de tenants e se o bootstrap do primeiro admin ainda é
+    necessário. Nunca expõe credenciais. Não exige autenticação (é o único
+    endpoint que permanece aberto pra liveness/readiness check)."""
+    from sqlalchemy import text as _text
+    info = {'status': 'ok', 'app': 'buscador-processos'}
+    try:
+        db.execute(_text('SELECT 1'))
+        info['database'] = {'conectado': True, 'dialect': db.bind.dialect.name}
+    except Exception as exc:
+        info['status'] = 'degraded'
+        info['database'] = {'conectado': False, 'erro': str(exc)[:200]}
+        return info
+
+    # Revision Alembic atual (do banco) vs esperada (dos arquivos).
+    try:
+        rev_atual = db.execute(_text('SELECT version_num FROM alembic_version')).fetchone()
+        info['database']['alembic_revision_atual'] = rev_atual[0] if rev_atual else None
+    except Exception:
+        info['database']['alembic_revision_atual'] = None
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        script = ScriptDirectory.from_config(Config('alembic.ini'))
+        info['database']['alembic_revision_esperada'] = script.get_current_head()
+    except Exception:
+        info['database']['alembic_revision_esperada'] = None
+
+    try:
+        info['tenants'] = db.query(Tenant).count()
+        info['bootstrap_necessario'] = db.query(User).first() is None
+    except Exception:
+        info['tenants'] = None
+        info['bootstrap_necessario'] = None
+    return info
 
 
 @app.get('/api/diagnostico', dependencies=[Depends(require_api_permission('processos:ler'))])
-def diagnostico_sistema():
+def diagnostico_sistema(db: Session = Depends(get_db)):
     """Diagnóstico honesto do que está configurado agora — pra responder,
     sem jargão, a pergunta 'minha ferramenta está pronta pra quê?'."""
     from .config import datajud_key_source
@@ -286,12 +327,13 @@ def diagnostico_sistema():
             'quantidade_salva': len(ev_arquivos),
         },
         'login': {
-            'ativo': bool(settings.app_login_password),
+            'ativo': db.query(User).first() is not None,
+            'multiusuario': True,
             'sessao_dura_dias': settings.session_ttl_days,
         },
         'banco_de_dados': {
-            'url': settings.database_url,
-            'persistente': '/data' in settings.database_url or not settings.database_url.startswith('sqlite:///./'),
+            'dialect': db.bind.dialect.name,
+            'persistente': not settings.database_url.startswith('sqlite:///./'),
         },
     }
 

@@ -1,3 +1,7 @@
+databases:
+  - name: buscador-postgres-prod
+    plan: basic-256mb  # plano pago — Postgres persistente de verdade (não expira como o free)
+
 services:
   - type: web
     name: buscador-processos
@@ -10,27 +14,19 @@ services:
       - key: APP_SECRET
         generateValue: true
       - key: DATABASE_URL
-        value: sqlite:////data/buscador_processos.db
+        fromDatabase:
+          name: buscador-postgres-prod
+          property: connectionString
       - key: DATAJUD_API_KEY
-        sync: false  # opcional: deixe em branco pra usar a chave publica oficial ja embutida em app/config.py
+        sync: false
       - key: DATAJUD_BASE_URL
         value: https://api-publica.datajud.cnj.jus.br
-      - key: JUDIT_ENABLED
-        value: false
-      - key: JUDIT_API_KEY
-        sync: false
-      - key: JUDIT_REQUESTS_BASE_URL
-        value: https://requests.production.judit.io
-      - key: JUDIT_TRACKING_BASE_URL
-        value: https://tracking.production.judit.io
-      - key: JUDIT_LAWSUITS_BASE_URL
-        value: https://lawsuits.production.judit.io
-      - key: JUDIT_NAME_SEARCH_TYPE
-        value: name
       - key: INTERNAL_API_TOKEN
         sync: false
-      - key: APP_LOGIN_PASSWORD
-        sync: false
+      - key: INDICE_CPF_HASH_SALT
+        generateValue: true
+      - key: CAMPAIGN_SENDING_ENABLED
+        value: false
       - key: STJ_UPLOAD_DIR
         value: /data/stj_uploads
       - key: EVIDENCE_UPLOAD_DIR

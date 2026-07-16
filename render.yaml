@@ -1,3 +1,8 @@
+databases:
+  - name: buscador-postgres
+    plan: free  # ATENÇÃO: Postgres free do Render é apagado 30 dias após criado.
+                # Para produção real, troque para 'basic' ou superior (pago).
+
 services:
   - type: web
     name: buscador-processos
@@ -10,27 +15,19 @@ services:
       - key: APP_SECRET
         generateValue: true
       - key: DATABASE_URL
-        value: sqlite:///./buscador_processos.db
+        fromDatabase:
+          name: buscador-postgres
+          property: connectionString
       - key: DATAJUD_API_KEY
-        sync: false  # opcional: deixe em branco pra usar a chave publica oficial ja embutida em app/config.py
+        sync: false  # opcional: em branco usa a chave pública oficial embutida em app/config.py
       - key: DATAJUD_BASE_URL
         value: https://api-publica.datajud.cnj.jus.br
-      - key: JUDIT_ENABLED
-        value: false
-      - key: JUDIT_API_KEY
-        sync: false
-      - key: JUDIT_REQUESTS_BASE_URL
-        value: https://requests.production.judit.io
-      - key: JUDIT_TRACKING_BASE_URL
-        value: https://tracking.production.judit.io
-      - key: JUDIT_LAWSUITS_BASE_URL
-        value: https://lawsuits.production.judit.io
-      - key: JUDIT_NAME_SEARCH_TYPE
-        value: name
       - key: INTERNAL_API_TOKEN
-        sync: false
-      - key: APP_LOGIN_PASSWORD
-        sync: false
+        sync: false  # opcional: pra cron/scripts externos chamarem a API sem sessão
+      - key: INDICE_CPF_HASH_SALT
+        generateValue: true  # salt do hash de CPF/CNPJ do índice — precisa ser secreto e estável
+      - key: CAMPAIGN_SENDING_ENABLED
+        value: false
       - key: STJ_UPLOAD_DIR
         value: data/stj_uploads
       - key: EVIDENCE_UPLOAD_DIR
