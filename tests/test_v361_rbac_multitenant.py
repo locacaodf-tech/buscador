@@ -175,3 +175,80 @@ def test_health_nao_exige_autenticacao():
     _usuario(tid, 'qualquer@meuprecatoriobr.com.br', UserRole.ADMINISTRADOR)
     c = TestClient(app)  # sem cookie
     assert c.get('/health').status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Isolamento por tenant nas queries (achado #2 — o ponto central)
+# ---------------------------------------------------------------------------
+
+def test_lead_do_tenant_a_nao_aparece_pro_tenant_b():
+    ta = _tenant('iso-a', 'Iso A')
+    tb = _tenant('iso-b', 'Iso B')
+    _, token_a = _usuario(ta, 'admin_iso_a@x.com', UserRole.ADMINISTRADOR)
+    _, token_b = _usuario(tb, 'admin_iso_b@x.com', UserRole.ADMINISTRADOR)
+
+    # tenant A cria um lead via importação
+    ca = _cli(token_a)
+    resp = ca.post('/api/watchers/import-publications', json={'texto_colado': 'Processo: 5555555-55.2026.8.09.0128 Estado de Goias precatorio', 'tribunal': 'TJGO', 'source': 'iso_a'})
+    assert resp.status_code == 200
+    leads_a = ca.get('/api/leads').json()
+    assert len(leads_a) >= 1
+    lead_id = leads_a[0]['id']
+
+    # tenant B NÃO vê o lead do A na lista
+    cb = _cli(token_b)
+    leads_b = cb.get('/api/leads').json()
+    ids_b = [l['id'] for l in leads_b]
+    assert lead_id not in ids_b
+
+    # tenant B NÃO abre o lead do A por ID (404 — nem confirma que existe)
+    assert cb.get(f'/api/leads/{lead_id}').status_code == 404
+
+
+def test_lead_do_tenant_a_nao_pode_ser_removido_pelo_tenant_b():
+    ta = _tenant('iso-c', 'Iso C')
+    tb = _tenant('iso-d', 'Iso D')
+    _, token_a = _usuario(ta, 'admin_iso_c@x.com', UserRole.ADMINISTRADOR)
+    _, token_b = _usuario(tb, 'admin_iso_d@x.com', UserRole.ADMINISTRADOR)
+
+    ca = _cli(token_a)
+    ca.post('/api/watchers/import-publications', json={'texto_colado': 'Processo: 7777777-77.2026.8.09.0128 Estado de Goias precatorio', 'tribunal': 'TJGO', 'source': 'iso_c'})
+    lead_id = ca.get('/api/leads').json()[0]['id']
+
+    # tenant B tenta remover o lead do A → 404
+    cb = _cli(token_b)
+    assert cb.post(f'/api/leads/{lead_id}/remover').status_code == 404
+    # e o lead do A continua lá pro A
+    assert ca.get(f'/api/leads/{lead_id}').status_code == 200
+
+
+def test_dossie_do_tenant_a_nao_abre_pro_tenant_b():
+    ta = _tenant('iso-e', 'Iso E')
+    tb = _tenant('iso-f', 'Iso F')
+    _, token_a = _usuario(ta, 'admin_iso_e@x.com', UserRole.ADMINISTRADOR)
+    _, token_b = _usuario(tb, 'admin_iso_f@x.com', UserRole.ADMINISTRADOR)
+
+    ca = _cli(token_a)
+    ca.post('/api/watchers/import-publications', json={'texto_colado': 'Processo: 8888888-88.2026.8.09.0128 Estado de Goias precatorio', 'tribunal': 'TJGO', 'source': 'iso_e'})
+    lead_id = ca.get('/api/leads').json()[0]['id']
+
+    cb = _cli(token_b)
+    resp = cb.get(f'/api/leads/{lead_id}/dossie', follow_redirects=False)
+    assert resp.status_code == 404
+
+
+def test_mesmo_cnj_pode_existir_em_tenants_distintos_sem_dedupe_cruzado():
+    ta = _tenant('iso-g', 'Iso G')
+    tb = _tenant('iso-h', 'Iso H')
+    _, token_a = _usuario(ta, 'admin_iso_g@x.com', UserRole.ADMINISTRADOR)
+    _, token_b = _usuario(tb, 'admin_iso_h@x.com', UserRole.ADMINISTRADOR)
+
+    mesmo_texto = 'Processo: 9090909-90.2026.8.09.0128 Estado de Goias precatorio'
+    ca = _cli(token_a)
+    ca.post('/api/watchers/import-publications', json={'texto_colado': mesmo_texto, 'tribunal': 'TJGO', 'source': 'iso_g'})
+    cb = _cli(token_b)
+    cb.post('/api/watchers/import-publications', json={'texto_colado': mesmo_texto, 'tribunal': 'TJGO', 'source': 'iso_h'})
+
+    # cada tenant vê o seu próprio lead (o mesmo CNJ existe nos dois, isolado)
+    assert len(ca.get('/api/leads').json()) >= 1
+    assert len(cb.get('/api/leads').json()) >= 1

@@ -145,6 +145,37 @@ def require_api_permission(permissao: str):
     return _checar
 
 
+def tenant_scope_atual(request: Request, db: Session = Depends(get_db)) -> str | None:
+    """v36.1 — resolve o tenant_id que deve escopar as queries de domínio.
+
+    - usuário logado → o tenant dele (isolamento real: só vê o próprio tenant);
+    - token interno / dev sem usuários → o tenant padrão (single-tenant atual),
+      ou None se nem o padrão existir ainda.
+
+    Aplicado em todas as leituras/escritas de dados de domínio para que um
+    usuário do tenant A nunca veja/altere/descubra registros do tenant B
+    (achado #2 da auditoria: o domínio legado era global)."""
+    user = _current_user(request, db)
+    if user:
+        return user.tenant_id
+    # Sem usuário (token interno ou dev aberto): usa o tenant padrão se houver.
+    tenant_padrao = db.query(Tenant).filter(Tenant.slug == 'meuprecatoriobr').first()
+    if tenant_padrao:
+        return tenant_padrao.id
+    primeiro = db.query(Tenant).first()
+    return primeiro.id if primeiro else None
+
+
+def _escopar_por_tenant(query, model, tenant_id: str | None):
+    """Filtra a query pelo tenant. Inclui registros com tenant_id NULL
+    (legados ainda não backfilled em dev), pra não sumir dado em ambiente
+    de desenvolvimento antes de rodar a migration. Em produção, o backfill
+    já preencheu tudo, então na prática filtra pelo tenant de verdade."""
+    if tenant_id is None:
+        return query
+    return query.filter((model.tenant_id == tenant_id) | (model.tenant_id.is_(None)))
+
+
 @app.get('/', response_class=HTMLResponse)
 def index(request: Request, db: Session = Depends(get_db)):
     algum_usuario_existe = db.query(User).first() is not None
@@ -538,7 +569,7 @@ def dossie_diligencia(diligencia_id: int, request: Request, db: Session = Depend
 
 
 @app.post('/api/bots/run', dependencies=[Depends(require_api_permission('busca:executar'))])
-async def bots_run(request: BotsRunRequest, db: Session = Depends(get_db)):
+async def bots_run(request: BotsRunRequest, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
     """Camada de bots executores (v30): mesma identificação de dado do
     motor (/api/diligencia), mas com rastreamento por bot/etapa (BotJob +
     BotStep) — cada bot que rodou, o que encontrou, o que falhou, o que
@@ -562,7 +593,7 @@ async def bots_run(request: BotsRunRequest, db: Session = Depends(get_db)):
         input_original=request.input, tipo_identificado=resultado['tipo_identificado'],
         objetivo=request.objetivo, status=resultado['status'],
         resumo_humano=resultado['resumo_humano'], proxima_acao=resultado['proxima_acao_recomendada'],
-        raw=resultado,
+        raw=resultado, tenant_id=tenant_id,
     )
     db.add(job)
     db.commit()
@@ -585,8 +616,8 @@ async def bots_run(request: BotsRunRequest, db: Session = Depends(get_db)):
 
 
 @app.get('/api/bots/jobs', dependencies=[Depends(require_api_permission('processos:ler'))])
-def bots_jobs_list(limit: int = 50, db: Session = Depends(get_db)):
-    jobs = db.query(BotJob).order_by(BotJob.created_at.desc()).limit(limit).all()
+def bots_jobs_list(limit: int = 50, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
+    jobs = _escopar_por_tenant(db.query(BotJob), BotJob, tenant_id).order_by(BotJob.created_at.desc()).limit(limit).all()
     return [{
         'id': j.id, 'created_at': j.created_at.isoformat(), 'input_original': j.input_original,
         'tipo_identificado': j.tipo_identificado, 'status': j.status,
@@ -595,8 +626,8 @@ def bots_jobs_list(limit: int = 50, db: Session = Depends(get_db)):
 
 
 @app.get('/api/bots/jobs/{job_id}', dependencies=[Depends(require_api_permission('processos:ler'))])
-def bots_job_detail(job_id: int, db: Session = Depends(get_db)):
-    job = db.query(BotJob).filter(BotJob.id == job_id).first()
+def bots_job_detail(job_id: int, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
+    job = _escopar_por_tenant(db.query(BotJob), BotJob, tenant_id).filter(BotJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail=f'Job {job_id} não encontrado.')
     steps = db.query(BotStep).filter(BotStep.job_id == job_id).all()
@@ -615,11 +646,11 @@ def bots_job_detail(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.post('/api/bots/jobs/{job_id}/resume', dependencies=[Depends(require_api_permission('busca:executar'))])
-async def bots_job_resume(job_id: int, request: BotsResumeRequest, db: Session = Depends(get_db)):
+async def bots_job_resume(job_id: int, request: BotsResumeRequest, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
     """Retoma um job pausado num captcha (PortalBot). Recebe o texto que o
     humano leu na imagem, digita e submete — nunca resolve o captcha
     sozinho."""
-    job = db.query(BotJob).filter(BotJob.id == job_id).first()
+    job = _escopar_por_tenant(db.query(BotJob), BotJob, tenant_id).filter(BotJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail=f'Job {job_id} não encontrado.')
     if job.status != 'waiting_user':
@@ -1049,8 +1080,8 @@ def watchers_run_detail(run_id: int, db: Session = Depends(get_db)):
 
 
 @app.get('/api/leads', dependencies=[Depends(require_api_permission('leads:ler'))])
-def leads_list(status: str | None = None, priority: str | None = None, limit: int = 100, db: Session = Depends(get_db)):
-    query = db.query(OpportunityLead)
+def leads_list(status: str | None = None, priority: str | None = None, limit: int = 100, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
+    query = _escopar_por_tenant(db.query(OpportunityLead), OpportunityLead, tenant_id)
     if status:
         query = query.filter(OpportunityLead.status == status)
     if priority:
@@ -1065,7 +1096,7 @@ def leads_list(status: str | None = None, priority: str | None = None, limit: in
 
 
 @app.get('/api/leads/export.csv', response_class=PlainTextResponse, dependencies=[Depends(require_api_permission('leads:ler'))])
-def leads_export_csv(db: Session = Depends(get_db)):
+def leads_export_csv(db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
     """v33 — exporta os leads em CSV: data, fonte, tribunal, CNJ, ente
     devedor, tipo de ação, sinal, prioridade, score, trecho, próxima ação,
     dossiê. Precisa vir ANTES de /api/leads/{lead_id} no registro de
@@ -1074,7 +1105,7 @@ def leads_export_csv(db: Session = Depends(get_db)):
     import csv
     import io as io_module
     from .services.whatsapp_intake import mascarar_documentos_no_texto
-    leads = db.query(OpportunityLead).order_by(OpportunityLead.confidence_score.desc()).all()
+    leads = _escopar_por_tenant(db.query(OpportunityLead), OpportunityLead, tenant_id).order_by(OpportunityLead.confidence_score.desc()).all()
     buf = io_module.StringIO()
     writer = csv.writer(buf)
     writer.writerow(['data', 'fonte', 'tribunal', 'cnj', 'ente_devedor', 'tipo_de_acao', 'sinal', 'prioridade', 'score', 'trecho_publicacao', 'proxima_acao', 'link_dossie'])
@@ -1090,7 +1121,7 @@ def leads_export_csv(db: Session = Depends(get_db)):
 
 
 @app.get('/api/leads/buscar', dependencies=[Depends(require_api_permission('leads:ler'))])
-def leads_buscar(nome: str | None = None, cpf: str | None = None, cnj: str | None = None, db: Session = Depends(get_db)):
+def leads_buscar(nome: str | None = None, cpf: str | None = None, cnj: str | None = None, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
     """Índice processual (uso pessoal): busca por nome, CPF/CNPJ (via hash,
     nunca decodifica o número) ou CNJ, entre os leads já capturados —
     escopados a ações contra ente público com sinal de interesse (ver
@@ -1098,7 +1129,7 @@ def leads_buscar(nome: str | None = None, cpf: str | None = None, cnj: str | Non
     ANTES de /api/leads/{lead_id} no registro de rotas."""
     from .utils.cpf import hash_document
     from .utils.cnj import normalize_cnj
-    query = db.query(OpportunityLead).filter(OpportunityLead.status != 'removido')
+    query = _escopar_por_tenant(db.query(OpportunityLead), OpportunityLead, tenant_id).filter(OpportunityLead.status != 'removido')
     if nome:
         query = query.filter(OpportunityLead.creditor_name.ilike(f'%{nome}%'))
     if cpf:
@@ -1118,8 +1149,8 @@ def leads_buscar(nome: str | None = None, cpf: str | None = None, cnj: str | Non
 
 
 @app.get('/api/leads/{lead_id}', dependencies=[Depends(require_api_permission('leads:ler'))])
-def lead_detail(lead_id: int, db: Session = Depends(get_db)):
-    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+def lead_detail(lead_id: int, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
+    lead = _escopar_por_tenant(db.query(OpportunityLead), OpportunityLead, tenant_id).filter(OpportunityLead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
     return {
@@ -1133,11 +1164,11 @@ def lead_detail(lead_id: int, db: Session = Depends(get_db)):
 
 
 @app.post('/api/leads/{lead_id}/remover', dependencies=[Depends(require_api_permission('leads:gerenciar'))])
-def lead_remover(lead_id: int, hard: bool = False, db: Session = Depends(get_db)):
+def lead_remover(lead_id: int, hard: bool = False, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
     """Remove um registro do índice/busca. hard=false (padrão): tira da
     busca. hard=true: anonimização real — limpa nome, documento (mascarado
     E hash), texto da publicação e URL de origem, não só marca status."""
-    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+    lead = _escopar_por_tenant(db.query(OpportunityLead), OpportunityLead, tenant_id).filter(OpportunityLead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
     lead.status = 'removido'
@@ -1152,8 +1183,8 @@ def lead_remover(lead_id: int, hard: bool = False, db: Session = Depends(get_db)
 
 
 @app.post('/api/leads/{lead_id}/run-bots', dependencies=[Depends(require_api_permission('busca:executar'))])
-async def lead_run_bots(lead_id: int, db: Session = Depends(get_db)):
-    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+async def lead_run_bots(lead_id: int, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
+    lead = _escopar_por_tenant(db.query(OpportunityLead), OpportunityLead, tenant_id).filter(OpportunityLead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
     if not lead.normalized_cnj:
@@ -1187,8 +1218,8 @@ async def lead_run_bots(lead_id: int, db: Session = Depends(get_db)):
 
 
 @app.post('/api/leads/{lead_id}/dismiss', dependencies=[Depends(require_api_permission('leads:gerenciar'))])
-def lead_dismiss(lead_id: int, db: Session = Depends(get_db)):
-    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+def lead_dismiss(lead_id: int, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
+    lead = _escopar_por_tenant(db.query(OpportunityLead), OpportunityLead, tenant_id).filter(OpportunityLead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
     lead.status = 'descartado'
@@ -1197,8 +1228,8 @@ def lead_dismiss(lead_id: int, db: Session = Depends(get_db)):
 
 
 @app.post('/api/leads/{lead_id}/mark-contacted', dependencies=[Depends(require_api_permission('leads:gerenciar'))])
-def lead_mark_contacted(lead_id: int, db: Session = Depends(get_db)):
-    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+def lead_mark_contacted(lead_id: int, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
+    lead = _escopar_por_tenant(db.query(OpportunityLead), OpportunityLead, tenant_id).filter(OpportunityLead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
     lead.status = 'contatado'
@@ -1214,7 +1245,8 @@ def lead_dossie(lead_id: int, request: Request, db: Session = Depends(get_db)):
     que é criado)."""
     if db.query(User).first() is not None and not _has_valid_session(request, db):
         return RedirectResponse(url='/login', status_code=303)
-    lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
+    tenant_id = tenant_scope_atual(request, db)
+    lead = _escopar_por_tenant(db.query(OpportunityLead), OpportunityLead, tenant_id).filter(OpportunityLead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail=f'Lead {lead_id} não encontrado.')
     status_labels = {'novo': 'Novo', 'contatado': 'Contatado', 'descartado': 'Descartado'}
@@ -1229,13 +1261,16 @@ def lead_dossie(lead_id: int, request: Request, db: Session = Depends(get_db)):
 
 
 @app.post('/api/watchers/import-publications', dependencies=[Depends(require_api_permission('watchers:executar'))])
-async def watchers_import_publications(request: ImportPublicationsRequest, db: Session = Depends(get_db)):
+async def watchers_import_publications(request: ImportPublicationsRequest, db: Session = Depends(get_db), tenant_id: str | None = Depends(tenant_scope_atual)):
     """v33 — importação REAL de publicações (não fixture). Aceita tanto
     uma lista estruturada quanto um texto colado solto (ex.: copiado
     direto do Comunica PJe, já que aquele site é navegável por humano
     mas o robots.txt dele desautoriza acesso automatizado — ver
     RELATORIO_V33 para a investigação completa). Usa a MESMA esteira do
-    Publication Watcher: publicação → sinal → lead → bots → dossiê."""
+    Publication Watcher: publicação → sinal → lead → bots → dossiê.
+
+    v36.1 — os leads/hits criados aqui recebem o tenant_id de quem importou,
+    pra que fiquem visíveis só pro tenant certo."""
     publicacoes: list[dict] = []
     if request.publications:
         for item in request.publications:
@@ -1257,12 +1292,13 @@ async def watchers_import_publications(request: ImportPublicationsRequest, db: S
 
     from .watchers.scheduler import rodar_watcher
     fonte = request.source or 'manual_import'
-    resultado = await rodar_watcher(db, 'publication_watcher', publicacoes_fixture=publicacoes, cnjs_conhecidos=None)
+    resultado = await rodar_watcher(db, 'publication_watcher', publicacoes_fixture=publicacoes, cnjs_conhecidos=None, tenant_id=tenant_id)
+    run_id = resultado['watcher_run_id']
     # Corrige a fonte dos hits/leads criados nesta chamada pra refletir a
     # origem real informada (ex.: 'manual_tjgo'), não o genérico
     # 'fixture_local' usado internamente pelo processar_publicacoes.
     if fonte != 'fixture_local':
-        db.query(PublicationHit).filter(PublicationHit.watcher_run_id == resultado['watcher_run_id']).update({'source': fonte})
+        db.query(PublicationHit).filter(PublicationHit.watcher_run_id == run_id).update({'source': fonte})
         recentes = db.query(OpportunityLead).filter(OpportunityLead.source == 'fixture_local').order_by(OpportunityLead.id.desc()).limit(len(publicacoes)).all()
         for lead in recentes:
             lead.source = fonte

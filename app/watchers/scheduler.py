@@ -26,7 +26,7 @@ def _calcular_dedupe_key(*, source: str, normalized_cnj: str | None, signal_type
     return '|'.join(partes)
 
 
-async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] | None = None, cnjs_conhecidos: list[str] | None = None) -> dict[str, Any]:
+async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] | None = None, cnjs_conhecidos: list[str] | None = None, tenant_id: str | None = None) -> dict[str, Any]:
     """Roda UM watcher específico por nome, salva tudo (com deduplicação
     de leads), devolve o resumo.
     watcher_name: 'publication_watcher' | 'datajud_movement_watcher' | 'stj_official_file_watcher'."""
@@ -36,7 +36,7 @@ async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] |
     settings = get_settings()
     auto_run_bots = getattr(settings, 'watchers_auto_run_bots', False)
 
-    run = WatcherRun(watcher_name=watcher_name, status='running')
+    run = WatcherRun(watcher_name=watcher_name, status='running', tenant_id=tenant_id)
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -71,7 +71,7 @@ async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] |
     for hit in resultado.hits:
         text_hash = _calcular_text_hash(hit.publication_text)
         publication_hit = PublicationHit(
-            watcher_run_id=run.id, source=hit.source, tribunal=hit.tribunal,
+            watcher_run_id=run.id, tenant_id=tenant_id, source=hit.source, tribunal=hit.tribunal,
             publication_date=hit.publication_date, process_number=hit.process_number,
             normalized_cnj=hit.normalized_cnj, parties_text=hit.parties_text, lawyers_text=hit.lawyers_text,
             publication_text=hit.publication_text, text_hash=text_hash, matched_terms=hit.matched_terms,
@@ -84,7 +84,14 @@ async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] |
             publication_date=hit.publication_date, text_hash=text_hash,
         )
 
-        lead_existente = db.query(OpportunityLead).filter(OpportunityLead.dedupe_key == dedupe_key).first()
+        # v36.1 — dedupe POR TENANT: o mesmo CNJ pode existir em tenants
+        # diferentes sem ser considerado duplicata cruzada (achado real
+        # testando: sem isso, se o tenant A já importou um CNJ, o tenant B
+        # importando o mesmo CNJ não criava lead nenhum).
+        lead_existente = db.query(OpportunityLead).filter(
+            OpportunityLead.dedupe_key == dedupe_key,
+            OpportunityLead.tenant_id == tenant_id,
+        ).first()
         if lead_existente:
             lead_existente.last_seen_at = agora
             lead_existente.seen_count = (lead_existente.seen_count or 1) + 1
@@ -103,6 +110,7 @@ async def rodar_watcher(db, watcher_name: str, publicacoes_fixture: list[dict] |
         from ..utils.cpf import mask_document, hash_document
         credor_doc = (hit.raw or {}).get('credor_cpf') or (hit.raw or {}).get('credor_cnpj')
         lead = OpportunityLead(
+            tenant_id=tenant_id,
             dedupe_key=dedupe_key, first_seen_at=agora, last_seen_at=agora, seen_count=1,
             source=hit.source, process_number=hit.process_number, normalized_cnj=hit.normalized_cnj,
             tribunal=hit.tribunal, debtor=(hit.raw or {}).get('ente_devedor'),
