@@ -17,8 +17,12 @@
       <p style="color:#b42318; font-weight:700; margin-top:0;">{{ error }}</p>
       {% endif %}
       <form method="post" action="/login">
+        {% if multi_tenant %}
+        <label>Organização</label>
+        <input type="text" name="tenant_slug" required autocomplete="organization" placeholder="ex: meuprecatoriobr" />
+        {% endif %}
         <label>E-mail</label>
-        <input type="email" name="email" autofocus required autocomplete="username" />
+        <input type="email" name="email" {% if not multi_tenant %}autofocus{% endif %} required autocomplete="username" />
         <label>Senha</label>
         <input type="password" name="password" required autocomplete="current-password" />
         <button type="submit">Entrar</button>

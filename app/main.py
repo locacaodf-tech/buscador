@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .services.auth import SESSION_COOKIE_NAME, criar_sessao, revogar_sessao, usuario_da_sessao, verify_password, hash_password, require_permission, get_current_user
-from .models_auth import User, UserRole, Tenant, AuditLogEntry, _novo_uuid
+from .models_auth import User, UserRole, Tenant, AuditLogEntry, _novo_uuid, usuario_tem_permissao
 from .config import get_settings, parse_allowed_origins
 from .db import get_db, init_db
 from .schemas import SearchRequest, SearchResponse, OfficialPrecatorioPlanRequest, DossierRequest, BrowserSearchRequest, StjSearchRequest, CertificatePlanRequest, CertificateRequestInput, PortalAutomationStartRequest, PortalAutomationSolveRequest, DiligenciaRequest, BotsRunRequest, BotsResumeRequest, IntakeWhatsappManualRequest, ImportPublicationsRequest, UserCreateRequest, UserUpdateRequest
@@ -80,11 +80,14 @@ def verify_internal_token(request: Request, x_internal_token: str | None = Heade
     """Protege as rotas /api/*.
 
     Aceita QUALQUER um dos dois, quando configurados:
-    - header X-Internal-Token == INTERNAL_API_TOKEN (uso por script/CLI/curl);
+    - header X-Internal-Token == INTERNAL_API_TOKEN (uso por script/CLI/cron);
     - sessão de usuário real logado (cookie), desde a v36.
 
-    Se nenhum dos dois estiver configurado, mantém o comportamento original: acesso aberto.
+    v36.1: em produção, se não houver NENHUM usuário criado e nenhum token
+    interno configurado, isto agora FALHA FECHADO (fail-closed) — antes
+    liberava tudo com só um aviso na tela.
     """
+    _bootstrap_pendente_fecha_producao(db)
     algum_usuario_existe = db.query(User).first() is not None
     if not settings.internal_api_token and not algum_usuario_existe:
         return
@@ -93,6 +96,47 @@ def verify_internal_token(request: Request, x_internal_token: str | None = Heade
     if _has_valid_session(request, db):
         return
     raise HTTPException(status_code=401, detail='Não autorizado. Faça login na tela ou informe X-Internal-Token.')
+
+
+def _ambiente_producao() -> bool:
+    return settings.app_env not in ('local', 'development', 'dev', 'test')
+
+
+def _bootstrap_pendente_fecha_producao(db: Session):
+    """v36.1 fail-closed: em produção, sem admin criado E sem token interno,
+    recusa toda rota protegida (só /health e /login passam, que não usam
+    esta dependência). Antes o sistema ficava aberto com um simples aviso."""
+    if not _ambiente_producao():
+        return
+    if settings.internal_api_token:
+        return
+    if db.query(User).first() is None:
+        raise HTTPException(
+            status_code=503,
+            detail='Configuração inicial necessária: nenhum administrador foi criado. Rode "python cli.py bootstrap-admin" antes de usar a aplicação em produção.',
+        )
+
+
+def require_api_permission(permissao: str):
+    """v36.1 — dependência pra rotas de domínio (não-admin): exige sessão
+    válida E que o papel do usuário tenha a permissão pedida. Mantém o
+    bypass do token interno (CLI/cron não têm usuário, mas são de
+    confiança). Corrige o achado da auditoria: antes, qualquer sessão
+    válida passava em qualquer endpoint, então um 'visualizador' criava
+    lead via POST /api/watchers/import-publications."""
+    def _checar(request: Request, x_internal_token: str | None = Header(default=None), db: Session = Depends(get_db)) -> User | None:
+        _bootstrap_pendente_fecha_producao(db)
+        if settings.internal_api_token and hmac.compare_digest(x_internal_token or '', settings.internal_api_token):
+            return None
+        if not settings.internal_api_token and db.query(User).first() is None:
+            return None
+        user = _current_user(request, db)
+        if not user:
+            raise HTTPException(status_code=401, detail='Não autorizado. Faça login na tela ou informe X-Internal-Token.')
+        if not usuario_tem_permissao(user.role, permissao):
+            raise HTTPException(status_code=403, detail=f'Seu papel ({user.role.value}) não tem permissão "{permissao}".')
+        return user
+    return _checar
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -120,7 +164,7 @@ def login_form(request: Request, db: Session = Depends(get_db)):
     algum_usuario_existe = db.query(User).first() is not None
     if not algum_usuario_existe or _has_valid_session(request, db):
         return RedirectResponse(url='/', status_code=303)
-    return templates.TemplateResponse(request, 'login.html', {'error': None})
+    return templates.TemplateResponse(request, 'login.html', {'error': None, 'multi_tenant': _mais_de_um_tenant(db)})
 
 
 # Rate limit simples de tentativas de login: em memória, por IP. Suficiente
@@ -143,27 +187,43 @@ def _register_login_failure(client_ip: str) -> None:
 
 
 @app.post('/login', response_class=HTMLResponse)
-def login_submit(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+def login_submit(request: Request, email: str = Form(...), password: str = Form(...), tenant_slug: str = Form(default=''), db: Session = Depends(get_db)):
     client_ip = request.client.host if request.client else 'unknown'
     if _login_rate_limited(client_ip):
         return templates.TemplateResponse(
             request,
             'login.html',
-            {'error': f'Muitas tentativas. Aguarde {LOGIN_WINDOW_SECONDS // 60} minutos e tente de novo.'},
+            {'error': f'Muitas tentativas. Aguarde {LOGIN_WINDOW_SECONDS // 60} minutos e tente de novo.', 'multi_tenant': _mais_de_um_tenant(db)},
             status_code=429,
         )
 
-    user = db.query(User).filter(User.email == email, User.is_active.is_(True)).first()
-    # Comparação sempre roda um hash (mesmo sem usuário) pra não vazar, pelo
-    # tempo de resposta, se o e-mail existe ou não (mesmo princípio do
-    # constant-time compare que já usava pra senha única).
+    email = email.strip().lower()
+    # v36.1 — login multitenant. Resolve o tenant primeiro, depois busca o
+    # usuário DENTRO dele (o unique é (tenant_id, email), então o mesmo
+    # e-mail pode existir em tenants diferentes — o .first() só por e-mail
+    # do código antigo podia pegar o usuário errado).
+    tenant = None
+    if tenant_slug.strip():
+        tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug.strip().lower(), Tenant.ativo.is_(True)).first()
+    else:
+        tenants_ativos = db.query(Tenant).filter(Tenant.ativo.is_(True)).all()
+        if len(tenants_ativos) == 1:
+            tenant = tenants_ativos[0]
+
+    user = None
+    if tenant:
+        user = db.query(User).filter(User.tenant_id == tenant.id, User.email == email, User.is_active.is_(True)).first()
+
+    # Sempre roda um hash (mesmo sem usuário/tenant) pra não vazar, pelo tempo
+    # de resposta, se o e-mail/tenant existe. Mensagem única: não revela se
+    # falhou tenant, e-mail ou senha (pedido da auditoria).
     senha_valida = verify_password(password, user.hashed_password) if user else verify_password(password, hash_password('senha-que-nunca-bate'))
     if not user or not senha_valida:
         _register_login_failure(client_ip)
         return templates.TemplateResponse(
             request,
             'login.html',
-            {'error': 'E-mail ou senha incorretos.'},
+            {'error': 'Organização, e-mail ou senha incorretos.', 'multi_tenant': _mais_de_um_tenant(db)},
             status_code=401,
         )
 
@@ -171,14 +231,14 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
     token = criar_sessao(db, user, user_agent=request.headers.get('user-agent'), ttl_hours=token_ttl_hours)
     response = RedirectResponse(url='/', status_code=303)
     response.set_cookie(
-        SESSION_COOKIE_NAME,
-        token,
-        httponly=True,
-        samesite='lax',
-        secure=settings.app_env != 'local',
-        max_age=token_ttl_hours * 3600,
+        SESSION_COOKIE_NAME, token, httponly=True, samesite='lax',
+        secure=settings.app_env != 'local', max_age=token_ttl_hours * 3600,
     )
     return response
+
+
+def _mais_de_um_tenant(db: Session) -> bool:
+    return db.query(Tenant).filter(Tenant.ativo.is_(True)).count() > 1
 
 
 @app.get('/logout')
@@ -196,7 +256,7 @@ def health():
     return {'status': 'ok'}
 
 
-@app.get('/api/diagnostico', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/diagnostico', dependencies=[Depends(require_api_permission('processos:ler'))])
 def diagnostico_sistema():
     """Diagnóstico honesto do que está configurado agora — pra responder,
     sem jargão, a pergunta 'minha ferramenta está pronta pra quê?'."""
@@ -236,12 +296,12 @@ def diagnostico_sistema():
     }
 
 
-@app.get('/api/tribunals', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/tribunals', dependencies=[Depends(require_api_permission('processos:ler'))])
 def tribunals():
     return {'all': ALL_TRIBUNALS, 'federal': FEDERAL_TRIBUNALS, 'default_precatorio': DEFAULT_PRECAT_TRIBUNALS}
 
 
-@app.get('/api/capabilities', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/capabilities', dependencies=[Depends(require_api_permission('processos:ler'))])
 def capabilities():
     return {
         'message': 'Cada provedor/API declara os identificadores aceitos e campos extras que pode exigir.',
@@ -249,14 +309,14 @@ def capabilities():
     }
 
 
-@app.post('/api/search', response_model=SearchResponse, dependencies=[Depends(verify_internal_token)])
+@app.post('/api/search', response_model=SearchResponse, dependencies=[Depends(require_api_permission('busca:executar'))])
 async def search(request: SearchRequest, db: Session = Depends(get_db)):
     orchestrator = ProcessLookupOrchestrator(db)
     return await orchestrator.search(request)
 
 
 
-@app.get('/api/official-precatorio/sources', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/official-precatorio/sources', dependencies=[Depends(require_api_permission('processos:ler'))])
 def official_precatorio_source_registry():
     return {
         'message': 'Registro de fontes oficiais/institucionais para precatórios, RPVs, LOA, orçamento, fila e pagamento.',
@@ -265,7 +325,7 @@ def official_precatorio_source_registry():
     }
 
 
-@app.post('/api/official-precatorio/plan', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/official-precatorio/plan', dependencies=[Depends(require_api_permission('processos:ler'))])
 def official_precatorio_plan(request: OfficialPrecatorioPlanRequest, db: Session = Depends(get_db)):
     search_type, search_key = request.resolved_type_and_key()
     plano = build_precatorio_route_plan(search_type, search_key, request.extra_params)
@@ -287,7 +347,7 @@ def official_precatorio_plan(request: OfficialPrecatorioPlanRequest, db: Session
     return plano
 
 
-@app.post('/api/diligencia', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/diligencia', dependencies=[Depends(require_api_permission('busca:executar'))])
 async def diligencia(request: DiligenciaRequest, db: Session = Depends(get_db)):
     """Motor Operacional de Diligência (v28/v29): ponto único de entrada — recebe
     qualquer dado digitado (CPF, CNPJ, nome, OAB, CNJ, sequencial STJ,
@@ -351,7 +411,7 @@ async def diligencia(request: DiligenciaRequest, db: Session = Depends(get_db)):
     return resultado
 
 
-@app.get('/api/diligencias', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/diligencias', dependencies=[Depends(require_api_permission('processos:ler'))])
 def listar_diligencias(limit: int = 50, db: Session = Depends(get_db)):
     """Lista as últimas diligências salvas, mais recente primeiro."""
     logs = db.query(DiligenciaLog).order_by(DiligenciaLog.created_at.desc()).limit(limit).all()
@@ -404,7 +464,7 @@ def _salvar_diligencia(
     return log
 
 
-@app.get('/api/diligencias/{diligencia_id}', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/diligencias/{diligencia_id}', dependencies=[Depends(require_api_permission('processos:ler'))])
 def obter_diligencia(diligencia_id: int, db: Session = Depends(get_db)):
     """Reabre uma diligência salva, com todo o detalhe (não só o resumo)."""
     log = _diligencia_ou_404(diligencia_id, db)
@@ -435,7 +495,7 @@ def dossie_diligencia(diligencia_id: int, request: Request, db: Session = Depend
     return templates.TemplateResponse(request, 'dossie.html', {'log': log})
 
 
-@app.post('/api/bots/run', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/bots/run', dependencies=[Depends(require_api_permission('busca:executar'))])
 async def bots_run(request: BotsRunRequest, db: Session = Depends(get_db)):
     """Camada de bots executores (v30): mesma identificação de dado do
     motor (/api/diligencia), mas com rastreamento por bot/etapa (BotJob +
@@ -482,7 +542,7 @@ async def bots_run(request: BotsRunRequest, db: Session = Depends(get_db)):
     return resultado
 
 
-@app.get('/api/bots/jobs', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/bots/jobs', dependencies=[Depends(require_api_permission('processos:ler'))])
 def bots_jobs_list(limit: int = 50, db: Session = Depends(get_db)):
     jobs = db.query(BotJob).order_by(BotJob.created_at.desc()).limit(limit).all()
     return [{
@@ -492,7 +552,7 @@ def bots_jobs_list(limit: int = 50, db: Session = Depends(get_db)):
     } for j in jobs]
 
 
-@app.get('/api/bots/jobs/{job_id}', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/bots/jobs/{job_id}', dependencies=[Depends(require_api_permission('processos:ler'))])
 def bots_job_detail(job_id: int, db: Session = Depends(get_db)):
     job = db.query(BotJob).filter(BotJob.id == job_id).first()
     if not job:
@@ -512,7 +572,7 @@ def bots_job_detail(job_id: int, db: Session = Depends(get_db)):
     }
 
 
-@app.post('/api/bots/jobs/{job_id}/resume', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/bots/jobs/{job_id}/resume', dependencies=[Depends(require_api_permission('busca:executar'))])
 async def bots_job_resume(job_id: int, request: BotsResumeRequest, db: Session = Depends(get_db)):
     """Retoma um job pausado num captcha (PortalBot). Recebe o texto que o
     humano leu na imagem, digita e submete — nunca resolve o captcha
@@ -541,7 +601,7 @@ async def bots_job_resume(job_id: int, request: BotsResumeRequest, db: Session =
     return bot_result.as_dict()
 
 
-@app.get('/api/bots/status', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/bots/status', dependencies=[Depends(require_api_permission('processos:ler'))])
 def bots_status_endpoint():
     """Lista os bots que existem e o que cada um faz de verdade hoje."""
     return {'bots': bots_runner.bots_status()}
@@ -565,7 +625,7 @@ def _obter_ou_criar_lead(db: Session, telefone: str | None, dados: dict) -> Lead
     return lead
 
 
-@app.post('/api/intake/whatsapp/manual', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/intake/whatsapp/manual', dependencies=[Depends(require_api_permission('watchers:executar'))])
 async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Session = Depends(get_db)):
     """v31 — IntakeBot manual: recebe texto colado do WhatsApp, extrai
     CPF/CNJ/nome/UF/ente devedor, normaliza o CNJ, infere tribunal, aponta
@@ -808,7 +868,7 @@ async def intake_whatsapp_manual(request: IntakeWhatsappManualRequest, db: Sessi
     }
 
 
-@app.post('/api/intake/whatsapp/screenshot', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/intake/whatsapp/screenshot', dependencies=[Depends(require_api_permission('watchers:executar'))])
 async def intake_whatsapp_screenshot(
     telefone: str = Form(''),
     arquivo: UploadFile = File(...),
@@ -839,7 +899,7 @@ async def intake_whatsapp_screenshot(
     }
 
 
-@app.get('/api/datajud/diagnostico/{cnj}', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/datajud/diagnostico/{cnj}', dependencies=[Depends(require_api_permission('processos:ler'))])
 async def datajud_diagnostico_endpoint(cnj: str, tribunal: str | None = None):
     """v31d — Auditoria multi-tribunal: mostra exatamente qual alias e
     endpoint do DataJud foram consultados pra este CNJ específico, o
@@ -850,7 +910,7 @@ async def datajud_diagnostico_endpoint(cnj: str, tribunal: str | None = None):
     return await diagnosticar_cnj(cnj, tribunal)
 
 
-@app.get('/api/watchers/status', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/watchers/status', dependencies=[Depends(require_api_permission('processos:ler'))])
 def watchers_status():
     """v32.1 — o que existe hoje, e com que grau de automação real."""
     from .config import get_settings
@@ -897,7 +957,7 @@ def _fixture_publicacoes_exemplo() -> list[dict]:
     return []
 
 
-@app.post('/api/watchers/run', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/watchers/run', dependencies=[Depends(require_api_permission('watchers:executar'))])
 async def watchers_run(request: Request, db: Session = Depends(get_db)):
     """v32 — aciona os watchers manualmente. Corpo opcional:
     {"watcher": "nome_especifico", "publicacoes": [...], "cnjs": [...]}.
@@ -921,7 +981,7 @@ async def watchers_run(request: Request, db: Session = Depends(get_db)):
     return await rodar_todos_os_watchers(db, publicacoes_fixture=publicacoes, cnjs_conhecidos=cnjs)
 
 
-@app.get('/api/watchers/runs', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/watchers/runs', dependencies=[Depends(require_api_permission('processos:ler'))])
 def watchers_runs_list(limit: int = 50, db: Session = Depends(get_db)):
     runs = db.query(WatcherRun).order_by(WatcherRun.id.desc()).limit(limit).all()
     return [{
@@ -932,7 +992,7 @@ def watchers_runs_list(limit: int = 50, db: Session = Depends(get_db)):
     } for r in runs]
 
 
-@app.get('/api/watchers/runs/{run_id}', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/watchers/runs/{run_id}', dependencies=[Depends(require_api_permission('processos:ler'))])
 def watchers_run_detail(run_id: int, db: Session = Depends(get_db)):
     run = db.query(WatcherRun).filter(WatcherRun.id == run_id).first()
     if not run:
@@ -946,7 +1006,7 @@ def watchers_run_detail(run_id: int, db: Session = Depends(get_db)):
     }
 
 
-@app.get('/api/leads', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/leads', dependencies=[Depends(require_api_permission('leads:ler'))])
 def leads_list(status: str | None = None, priority: str | None = None, limit: int = 100, db: Session = Depends(get_db)):
     query = db.query(OpportunityLead)
     if status:
@@ -962,7 +1022,7 @@ def leads_list(status: str | None = None, priority: str | None = None, limit: in
     } for l in leads]
 
 
-@app.get('/api/leads/export.csv', response_class=PlainTextResponse, dependencies=[Depends(verify_internal_token)])
+@app.get('/api/leads/export.csv', response_class=PlainTextResponse, dependencies=[Depends(require_api_permission('leads:ler'))])
 def leads_export_csv(db: Session = Depends(get_db)):
     """v33 — exporta os leads em CSV: data, fonte, tribunal, CNJ, ente
     devedor, tipo de ação, sinal, prioridade, score, trecho, próxima ação,
@@ -987,7 +1047,7 @@ def leads_export_csv(db: Session = Depends(get_db)):
     return buf.getvalue()
 
 
-@app.get('/api/leads/buscar', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/leads/buscar', dependencies=[Depends(require_api_permission('leads:ler'))])
 def leads_buscar(nome: str | None = None, cpf: str | None = None, cnj: str | None = None, db: Session = Depends(get_db)):
     """Índice processual (uso pessoal): busca por nome, CPF/CNPJ (via hash,
     nunca decodifica o número) ou CNJ, entre os leads já capturados —
@@ -1015,7 +1075,7 @@ def leads_buscar(nome: str | None = None, cpf: str | None = None, cnj: str | Non
     } for l in resultados]
 
 
-@app.get('/api/leads/{lead_id}', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/leads/{lead_id}', dependencies=[Depends(require_api_permission('leads:ler'))])
 def lead_detail(lead_id: int, db: Session = Depends(get_db)):
     lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
     if not lead:
@@ -1030,7 +1090,7 @@ def lead_detail(lead_id: int, db: Session = Depends(get_db)):
     }
 
 
-@app.post('/api/leads/{lead_id}/remover', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/leads/{lead_id}/remover', dependencies=[Depends(require_api_permission('leads:gerenciar'))])
 def lead_remover(lead_id: int, hard: bool = False, db: Session = Depends(get_db)):
     """Remove um registro do índice/busca. hard=false (padrão): tira da
     busca. hard=true: anonimização real — limpa nome, documento (mascarado
@@ -1049,7 +1109,7 @@ def lead_remover(lead_id: int, hard: bool = False, db: Session = Depends(get_db)
     return {'lead_id': lead.id, 'status': lead.status, 'hard': hard}
 
 
-@app.post('/api/leads/{lead_id}/run-bots', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/leads/{lead_id}/run-bots', dependencies=[Depends(require_api_permission('busca:executar'))])
 async def lead_run_bots(lead_id: int, db: Session = Depends(get_db)):
     lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
     if not lead:
@@ -1084,7 +1144,7 @@ async def lead_run_bots(lead_id: int, db: Session = Depends(get_db)):
     return {'lead_id': lead.id, 'bot_job_id': job.id, 'dossie_url': lead.dossie_url, 'status': bots_resultado['status']}
 
 
-@app.post('/api/leads/{lead_id}/dismiss', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/leads/{lead_id}/dismiss', dependencies=[Depends(require_api_permission('leads:gerenciar'))])
 def lead_dismiss(lead_id: int, db: Session = Depends(get_db)):
     lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
     if not lead:
@@ -1094,7 +1154,7 @@ def lead_dismiss(lead_id: int, db: Session = Depends(get_db)):
     return {'lead_id': lead.id, 'status': lead.status}
 
 
-@app.post('/api/leads/{lead_id}/mark-contacted', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/leads/{lead_id}/mark-contacted', dependencies=[Depends(require_api_permission('leads:gerenciar'))])
 def lead_mark_contacted(lead_id: int, db: Session = Depends(get_db)):
     lead = db.query(OpportunityLead).filter(OpportunityLead.id == lead_id).first()
     if not lead:
@@ -1126,7 +1186,7 @@ def lead_dossie(lead_id: int, request: Request, db: Session = Depends(get_db)):
     })
 
 
-@app.post('/api/watchers/import-publications', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/watchers/import-publications', dependencies=[Depends(require_api_permission('watchers:executar'))])
 async def watchers_import_publications(request: ImportPublicationsRequest, db: Session = Depends(get_db)):
     """v33 — importação REAL de publicações (não fixture). Aceita tanto
     uma lista estruturada quanto um texto colado solto (ex.: copiado
@@ -1172,23 +1232,34 @@ async def watchers_import_publications(request: ImportPublicationsRequest, db: S
 @app.post('/api/admin/users')
 def admin_criar_usuario(payload: UserCreateRequest, current_user: User = Depends(require_permission('admin:usuarios')), db: Session = Depends(get_db)):
     """v36 — só administrador cria usuário. Nunca público (é exatamente o
-    inverso da vulnerabilidade encontrada no BuyerRadar original)."""
+    inverso da vulnerabilidade encontrada no BuyerRadar original).
+    v36.1 — valida e-mail/senha e normaliza e-mail lowercase."""
+    email = (payload.email or '').strip().lower()
+    full_name = (payload.full_name or '').strip()
+    if '@' not in email or '.' not in email.split('@')[-1]:
+        raise HTTPException(status_code=400, detail='E-mail inválido.')
+    if not full_name:
+        raise HTTPException(status_code=400, detail='Nome completo é obrigatório.')
+    if len(payload.password or '') < 8:
+        raise HTTPException(status_code=400, detail='A senha precisa ter pelo menos 8 caracteres.')
+    if (payload.password or '').strip().lower() == email:
+        raise HTTPException(status_code=400, detail='A senha não pode ser igual ao e-mail.')
     try:
         role = UserRole(payload.role)
     except ValueError:
         raise HTTPException(status_code=400, detail=f'Papel inválido: {payload.role}. Use um de: {[r.value for r in UserRole]}')
 
-    existente = db.query(User).filter(User.tenant_id == current_user.tenant_id, User.email == payload.email).first()
+    existente = db.query(User).filter(User.tenant_id == current_user.tenant_id, User.email == email).first()
     if existente:
-        raise HTTPException(status_code=409, detail=f'Já existe um usuário com o e-mail {payload.email} neste tenant.')
+        raise HTTPException(status_code=409, detail=f'Já existe um usuário com o e-mail {email} neste tenant.')
 
     novo = User(
-        id=_novo_uuid(), tenant_id=current_user.tenant_id, email=payload.email, full_name=payload.full_name,
+        id=_novo_uuid(), tenant_id=current_user.tenant_id, email=email, full_name=full_name,
         hashed_password=hash_password(payload.password), role=role, is_active=True,
         created_by_user_id=current_user.id,
     )
     db.add(novo)
-    db.add(AuditLogEntry(tenant_id=current_user.tenant_id, user_id=current_user.id, action='criar_usuario', resource_type='user', resource_id=novo.id, details={'email': payload.email, 'role': role.value}))
+    db.add(AuditLogEntry(tenant_id=current_user.tenant_id, user_id=current_user.id, action='criar_usuario', resource_type='user', resource_id=novo.id, details={'email': email, 'role': role.value}))
     db.commit()
     db.refresh(novo)
     return {'id': novo.id, 'email': novo.email, 'full_name': novo.full_name, 'role': novo.role.value, 'is_active': novo.is_active}
@@ -1295,7 +1366,7 @@ def bots_job_dossie(job_id: int, request: Request, db: Session = Depends(get_db)
     })
 
 
-@app.post('/api/dossier', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/dossier', dependencies=[Depends(require_api_permission('busca:executar'))])
 async def dossier(request: DossierRequest, db: Session = Depends(get_db)):
     """Monta a primeira versão do Dossiê/Raio-X.
 
@@ -1322,7 +1393,7 @@ async def dossier(request: DossierRequest, db: Session = Depends(get_db)):
         'important_note': 'Indício processual não confirma inscrição em LOA. Confirmação exige fonte oficial de precatório/LOA no plano.',
     }
 
-@app.post('/api/official-precatorio/browser-search', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/official-precatorio/browser-search', dependencies=[Depends(require_api_permission('busca:executar'))])
 async def official_precatorio_browser_search(request: BrowserSearchRequest):
     """Consulta um portal oficial via automação de navegador (Playwright).
 
@@ -1353,7 +1424,7 @@ async def official_precatorio_browser_search(request: BrowserSearchRequest):
 CHROME_EXECUTABLE_PATH = settings.playwright_chrome_path or None
 
 
-@app.get('/api/stj-precatorios/official-files', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/stj-precatorios/official-files', dependencies=[Depends(require_api_permission('processos:ler'))])
 def stj_official_files_list(db: Session = Depends(get_db)):
     """Lista os arquivos oficiais do STJ conhecidos/já baixados pelo StjBot."""
     from .models import StjOfficialFile
@@ -1366,7 +1437,7 @@ def stj_official_files_list(db: Session = Depends(get_db)):
     } for a in arquivos]
 
 
-@app.post('/api/stj-precatorios/sync', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/stj-precatorios/sync', dependencies=[Depends(require_api_permission('watchers:executar'))])
 async def stj_official_sync(db: Session = Depends(get_db)):
     """Força o StjBot a buscar/baixar os arquivos oficiais públicos do STJ
     agora — sem esperar upload manual. Se não conseguir acessar a página ou
@@ -1375,7 +1446,7 @@ async def stj_official_sync(db: Session = Depends(get_db)):
     return await sync_official_files(db)
 
 
-@app.post('/api/portal-automation/start', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/portal-automation/start', dependencies=[Depends(require_api_permission('busca:executar'))])
 async def portal_automation_start(request: PortalAutomationStartRequest):
     """Abre uma sessão de navegador real (Playwright), navega até a URL,
     preenche os campos informados. Se a página tiver captcha clássico
@@ -1393,7 +1464,7 @@ async def portal_automation_start(request: PortalAutomationStartRequest):
     )
 
 
-@app.post('/api/portal-automation/{session_id}/solve', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/portal-automation/{session_id}/solve', dependencies=[Depends(require_api_permission('busca:executar'))])
 async def portal_automation_solve(session_id: str, request: PortalAutomationSolveRequest):
     """Retoma uma sessão pausada num captcha: você resolveu, manda o texto
     aqui, a automação digita e submete. A sessão expira em 5 minutos se
@@ -1401,7 +1472,7 @@ async def portal_automation_solve(session_id: str, request: PortalAutomationSolv
     return await captcha_relay.solve_captcha_session(session_id, request.captcha_text)
 
 
-@app.post('/api/stj-precatorios/upload-xlsx', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/stj-precatorios/upload-xlsx', dependencies=[Depends(require_api_permission('watchers:executar'))])
 async def stj_upload_xlsx(file: UploadFile = File(...)):
     """Recebe o XLSX oficial do STJ baixado manualmente (processo/precatorios
     em stj.jus.br), salva em pasta local controlada (STJ_UPLOAD_DIR) e
@@ -1429,7 +1500,7 @@ async def stj_upload_xlsx(file: UploadFile = File(...)):
     }
 
 
-@app.post('/api/stj-precatorios/search', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/stj-precatorios/search', dependencies=[Depends(require_api_permission('busca:executar'))])
 def stj_search(request: StjSearchRequest, db: Session = Depends(get_db)):
     """Busca nos arquivos oficiais do STJ que já foram enviados via
     /api/stj-precatorios/upload-xlsx. Nunca cai para dado sintético: se
@@ -1464,7 +1535,7 @@ def stj_search(request: StjSearchRequest, db: Session = Depends(get_db)):
     return resultado
 
 
-@app.get('/api/sources', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/sources', dependencies=[Depends(require_api_permission('processos:ler'))])
 def all_sources():
     """Visão única de tudo: precatório oficial + certidões + APIs
     processuais/comerciais externas. Não esconde nada não implementado —
@@ -1478,7 +1549,7 @@ def all_sources():
     }
 
 
-@app.get('/api/certificates/sources', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/certificates/sources', dependencies=[Depends(require_api_permission('processos:ler'))])
 def certificate_sources_endpoint():
     return {
         'message': 'Fontes de certidões (certificate_center). Status honesto por fonte — nenhuma certidão é inventada.',
@@ -1486,12 +1557,12 @@ def certificate_sources_endpoint():
     }
 
 
-@app.post('/api/certificates/plan', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/certificates/plan', dependencies=[Depends(require_api_permission('processos:ler'))])
 def certificate_plan(request: CertificatePlanRequest):
     return certificate_center.build_certificate_plan(request.document, request.certificate_types)
 
 
-@app.post('/api/certificates/request', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/certificates/request', dependencies=[Depends(require_api_permission('evidencias:gerenciar'))])
 async def certificate_request(request: CertificateRequestInput, db: Session = Depends(get_db)):
     result = await certificate_center.request_certificate(
         request.source_id, request.certificate_type, request.document, request.name, request.extra,
@@ -1527,7 +1598,7 @@ async def certificate_request(request: CertificateRequestInput, db: Session = De
     return {'id': record.id, 'created_at': record.created_at.isoformat(), 'diligencia_id': log.id, **result}
 
 
-@app.get('/api/certificates/{certificate_id}', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/certificates/{certificate_id}', dependencies=[Depends(require_api_permission('processos:ler'))])
 def certificate_get(certificate_id: int, db: Session = Depends(get_db)):
     record = db.query(CertificateRecord).filter(CertificateRecord.id == certificate_id).first()
     if not record:
@@ -1550,7 +1621,7 @@ def certificate_get(certificate_id: int, db: Session = Depends(get_db)):
     }
 
 
-@app.post('/api/evidencias', dependencies=[Depends(verify_internal_token)])
+@app.post('/api/evidencias', dependencies=[Depends(require_api_permission('evidencias:gerenciar'))])
 async def registrar_evidencia_manual(
     fonte: str = Form(...),
     referencia: str = Form(''),
@@ -1594,7 +1665,7 @@ async def registrar_evidencia_manual(
     }
 
 
-@app.get('/api/evidencias', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/evidencias', dependencies=[Depends(require_api_permission('evidencias:gerenciar'))])
 def listar_evidencias_manuais(referencia: str | None = None, limit: int = 50, db: Session = Depends(get_db)):
     query = db.query(ManualEvidence).order_by(ManualEvidence.created_at.desc())
     if referencia:
@@ -1610,7 +1681,7 @@ def listar_evidencias_manuais(referencia: str | None = None, limit: int = 50, db
     } for r in registros]
 
 
-@app.get('/api/history', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/history', dependencies=[Depends(require_api_permission('processos:ler'))])
 def history(limit: int = 50, db: Session = Depends(get_db)):
     logs = db.query(SearchLog).order_by(SearchLog.created_at.desc()).limit(limit).all()
     return [{
@@ -1625,7 +1696,7 @@ def history(limit: int = 50, db: Session = Depends(get_db)):
     } for row in logs]
 
 
-@app.get('/api/results/{search_log_id}', dependencies=[Depends(verify_internal_token)])
+@app.get('/api/results/{search_log_id}', dependencies=[Depends(require_api_permission('processos:ler'))])
 def results(search_log_id: int, db: Session = Depends(get_db)):
     rows = db.query(ProcessResult).filter(ProcessResult.search_log_id == search_log_id).order_by(ProcessResult.precatorio_score.desc()).all()
     return [{

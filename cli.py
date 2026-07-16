@@ -79,6 +79,7 @@ def bootstrap_admin(
     from app.models_auth import Tenant, User, UserRole
     from app.services.auth import hash_password
 
+    email = email.strip().lower()
     init_db()
     db = SessionLocal()
     try:

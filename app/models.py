@@ -6,6 +6,10 @@ from .db import Base
 
 class SearchLog(Base):
     __tablename__ = 'search_logs'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -20,6 +24,10 @@ class SearchLog(Base):
 
 class ProcessResult(Base):
     __tablename__ = 'process_results'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     search_log_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
@@ -46,6 +54,10 @@ class CertificateRecord(Base):
     """
 
     __tablename__ = 'certificate_records'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -71,6 +83,10 @@ class ManualEvidence(Base):
     que o próprio usuário coletou e confirma que é real."""
 
     __tablename__ = 'manual_evidences'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -88,6 +104,10 @@ class DiligenciaLog(Base):
     resumo, porque o dossiê precisa de todo o detalhe."""
 
     __tablename__ = 'diligencia_logs'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -114,6 +134,10 @@ class BotJob(Base):
     bot específico (o PortalBot) pausa esperando intervenção humana."""
 
     __tablename__ = 'bot_jobs'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -131,6 +155,10 @@ class BotStep(Base):
     """Uma etapa (um bot específico) dentro de um BotJob."""
 
     __tablename__ = 'bot_steps'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     job_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
@@ -152,6 +180,10 @@ class StjOfficialFile(Base):
     resultado do download, pra nunca fingir que uma tentativa deu certo."""
 
     __tablename__ = 'stj_official_files'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -172,6 +204,10 @@ class Lead(Base):
     diligências (IntakeCase) ao longo do tempo."""
 
     __tablename__ = 'leads'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -187,6 +223,10 @@ class WhatsAppMessage(Base):
     """Mensagem (texto colado ou print) recebida de um Lead."""
 
     __tablename__ = 'whatsapp_messages'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     lead_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
@@ -202,6 +242,10 @@ class IntakeCase(Base):
     vincula o Lead, os dados extraídos e o job de bots acionado."""
 
     __tablename__ = 'intake_cases'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -222,6 +266,10 @@ class WatcherRun(Base):
     fonte falhando não impede as outras de terminar."""
 
     __tablename__ = 'watcher_runs'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     watcher_name: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -242,6 +290,10 @@ class PublicationHit(Base):
     bateu com algum termo de interesse."""
 
     __tablename__ = 'publication_hits'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     watcher_run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
@@ -266,6 +318,10 @@ class OpportunityLead(Base):
     (ou de outra fonte de sinal), já pontuada e priorizada."""
 
     __tablename__ = 'opportunity_leads'
+    # v36.1: escopo por tenant. nullable pra não quebrar dados legados;
+    # a migration faz backfill pro tenant padrão e o filtro por tenant
+    # é aplicado nas queries (ver helpers em app/main.py).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

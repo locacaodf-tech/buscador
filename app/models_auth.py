@@ -107,22 +107,25 @@ PERMISSOES_POR_PAPEL: dict[UserRole, set[str]] = {
     UserRole.ADMINISTRADOR: {'*'},  # administrador gerencia toda a plataforma
     UserRole.PESQUISADOR: {
         'busca:executar', 'processos:ler', 'compradores:ler', 'fontes:ler',
-        'ativos:ler', 'watchers:executar',
+        'ativos:ler', 'watchers:executar', 'leads:ler', 'leads:gerenciar',
+        'evidencias:gerenciar',
     },
     UserRole.JURIDICO: {
         'processos:ler', 'ativos:ler', 'ativos:validar_juridico', 'ativos:avaliar_risco',
-        'ativos:definir_elegibilidade', 'compradores:ler',
+        'ativos:definir_elegibilidade', 'compradores:ler', 'leads:ler', 'evidencias:gerenciar',
     },
     UserRole.COMERCIAL: {
         'processos:ler', 'ativos:ler', 'compradores:ler', 'compradores:gerenciar',
         'contatos:gerenciar', 'campanhas:criar', 'campanhas:editar', 'negociacoes:gerenciar',
-        'propostas:gerenciar',
+        'propostas:gerenciar', 'leads:ler', 'leads:gerenciar',
     },
     UserRole.APROVADOR: {
         'processos:ler', 'ativos:ler', 'compradores:ler', 'campanhas:ler', 'campanhas:aprovar',
+        'leads:ler',
     },
     UserRole.VISUALIZADOR: {
         'processos:ler', 'ativos:ler', 'compradores:ler', 'campanhas:ler', 'fontes:ler',
+        'leads:ler',
     },
 }
 
